@@ -1,0 +1,99 @@
+---
+name: test-runner
+description: Run web tests (Playwright specs + chrome-devtools-MCP cases), merge results into a quality gate, and report pass/fail back to the user. Use when asked to run tests, execute a test plan, check the quality gate, or get a pass/fail report. Phase 4 of the web-test workflow.
+---
+
+Execute a site's test plan and decide the **quality gate**. Phase 4 of the `web-test`
+workflow. Runs both execution mechanisms, merges them, and **reports back to the user**.
+Owns `playwright.config.mjs` + `report.mjs`.
+
+Run from the project root. `BASE_URL` sets the target and resolves `artifacts/<host>/`.
+
+## Two execution paths (a plan can mix both)
+
+**A · Playwright cases (`Tool=PW`)** — the generated specs:
+```bash
+BASE_URL=https://brse.ai npx playwright test --config .claude/skills/test-runner/playwright.config.mjs
+# (shortcut: BASE_URL=https://brse.ai npm test)
+```
+Config derives the host from `BASE_URL` → runs `artifacts/<host>/tests`, writes
+`artifacts/<host>/{results.json,html-report,test-results}`.
+
+**B · chrome-devtools-MCP cases (`Tool=MCP`)** — for each `Tool=MCP` row in
+`artifacts/<host>/test-plan.md`, drive the live browser yourself with
+`mcp__chrome-devtools__*` (navigate_page, click, fill, take_snapshot,
+list_console_messages, list_network_requests), follow "Các bước", judge "Kỳ vọng",
+and record the verdict. Append every MCP case to `artifacts/<host>/mcp-results.json`:
+```json
+[
+  { "tc": "TC-010", "prio": "P1", "status": "passed",  "title": "Drag-drop động", "durationMs": 1200 },
+  { "tc": "TC-023", "prio": "P0", "status": "skipped", "title": "Bắt đầu meeting", "durationMs": 0,
+    "note": "Treo ở 'Starting...' — chờ hộp thoại getDisplayMedia, MCP không approve được." }
+]
+```
+| Field | | |
+|---|---|---|
+| `tc` | required | `TC-\d+`, matches the plan row |
+| `prio` | required | `P0`..`P3` |
+| `status` | required | `passed` \| `failed` \| `skipped` |
+| `title` | required | short description |
+| `durationMs` | optional | number; `0` for a skip |
+| `note` | optional string | why it was skipped, or the evidence behind a verdict |
+
+`skipped` means **could not be verified** — a tool/environment limit or a missing
+precondition — not "failed". `report.mjs` drops skipped cases from every pass-rate
+denominator and prints them under ⏭️ SKIP, so never record a blocked case as `failed`.
+**Always attach a `note` to a skip**; it is what the gate report shows in place of a result.
+
+(Skip this path entirely if the plan has no `Tool=MCP` rows.)
+
+**Clean up after yourself.** An MCP case that creates, edits or deletes real data on
+staging must be undone by the agent (delete what it created, restore what it changed)
+immediately after the verdict is recorded — Playwright has `afterEach`/fixtures, an
+agent-driven case has nothing but this rule. Repeat the cleanup step in that case's
+run instructions so it is not forgotten on a re-run.
+
+## Gate + report back to the user
+```bash
+BASE_URL=https://brse.ai node .claude/skills/test-runner/report.mjs
+# (shortcut: BASE_URL=https://brse.ai npm run gate)
+```
+`report.mjs` merges `results.json` + `mcp-results.json` → writes
+`artifacts/<host>/quality-gate.md` and prints a summary. **Relay that summary to the
+user** — don't just leave the file. Always tell them:
+- decision **PASS / CONCERNS / BLOCKED / FAIL** + the rationale
+- **counts**: total, passed, failed, skipped — and per-priority pass rate (P0/P1/P2/P3)
+- the **list of failed cases** (TC id + title + where)
+- the **list of skipped cases** with their `note` — say plainly that these are unverified,
+  not broken, and what it would take to verify them
+- links: `artifacts/<host>/quality-gate.md` and `npx playwright show-report artifacts/<host>/html-report`
+
+Gate rules (`resources/knowledge/quality-gates.md`): P0 = 100% else FAIL; a P0 case that was
+*skipped* (unverified) gives **BLOCKED**, not FAIL; P1 ≥ 95% else CONCERNS; any remaining
+skip drops the decision to CONCERNS; P2/P3 failures informational. Pass rates are computed
+over executed cases only. Exit codes: **1 on FAIL, 2 on BLOCKED**, 0 otherwise — so
+CI/orchestrator can block on either, and tell them apart.
+
+## On failure
+Hand failing cases to **self-healer** (diagnoses on the live page, proposes a fix for
+your approval), then re-run this phase. Distinguish a real app bug (report it, don't
+"fix" the test) from a flaky/incorrect script (heal it).
+
+## Gotchas
+- `report.mjs` needs `BASE_URL` (or a host arg) to know which `artifacts/<host>/` to read.
+- If only MCP cases exist, there's no `results.json` — `report.mjs` still works from `mcp-results.json` alone.
+- chrome-devtools MCP must be connected for `Tool=MCP` cases; if absent, run the PW cases and report the MCP ones as skipped (say so).
+- **A button stuck on `Starting...` / `Connecting...` with no console error is a native media
+  dialog, not an app bug.** `getUserMedia`/`getDisplayMedia` opens the browser's own
+  "Choose what to share" window — it is outside the DOM, so it never appears in a snapshot
+  and no click can reach it; the promise simply never settles. Headless Playwright hits the
+  same wall from the other side (no microphone → the source-language select renders
+  disabled). **Fix:** `.mcp.json` now launches Chrome with
+  `--chrome-arg=--use-fake-ui-for-media-stream` and
+  `--chrome-arg=--auto-select-desktop-capture-source=Entire screen`, which was measured to
+  carry dev.brse.ai's TC-023 from `Starting...` to the live meeting UI in ~1s. Flags apply
+  only when the MCP server launches Chrome itself, and **only from the next session** —
+  servers load at session start. The stream is synthetic, and auto-accept kills any
+  "user denies permission" case. Details, the measurement table and the reusable probes:
+  [`resources/knowledge/media-capture-cases.md`](resources/knowledge/media-capture-cases.md).
+  If a case still hangs, that is a `skipped` with a `note` — never a `failed`.
