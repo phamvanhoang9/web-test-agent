@@ -38,4 +38,11 @@ Worked example: `examples/brse-login.spec.mjs` (maps TC-001…TC-005 from the br
 - Specs use `baseURL` (test-runner sets it from `BASE_URL`), so navigate with `page.goto('/')`, `page.goto('/login')`.
 - Group a site's tests by area into one or a few `*.spec.mjs` files under `artifacts/<host>/tests/`.
 - Don't invent cases not in the table — if the plan misses something, send it back to test-designer.
+- **Bring your own data.** Never make a test depend on a record that happens to exist on the site
+  (a meeting, an order, a user) — someone deletes it and a dozen cases fail with no app bug.
+  Create what the tests need in a fixture, through the site's API where it has one, and delete
+  it for good in the fixture's teardown: one worker-scoped record for read-only cases, a
+  test-scoped one for each case that edits or deletes. Name them `e2e-*` so leftovers are
+  recognisable. Reading a record that belongs to the site's own seed (a system dictionary, a
+  plan catalogue) is fine; say so in the plan.
 - Hand off to **test-runner** to execute.
