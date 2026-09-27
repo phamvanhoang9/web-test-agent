@@ -75,6 +75,32 @@ test('access matrix classifies every role; probe visits stay out of health', () 
   assert.deepEqual(map.health, []);
 });
 
+test('bundle routes: queued routes resolve to opened or not visited, with their template', () => {
+  const map = siteMap([pageVisit('admin', '/'), pageVisit('admin', '/admin')], {
+    bundle: {
+      scripts: 2,
+      relative: 3,
+      routes: [
+        { route: '/admin', url: `${ORIGIN}/admin`, outcome: 'queued' },
+        { route: '/settings', url: `${ORIGIN}/settings`, outcome: 'queued' },
+        { route: '/meetings/:id/live', url: `${ORIGIN}/meetings/7/live`, outcome: 'unsafe' },
+        { route: '/reports/:id', url: null, outcome: 'no-id' },
+      ],
+    },
+  });
+
+  assert.deepEqual(map.bundleRoutes.routes.map((r) => [r.route, r.outcome, r.template]), [
+    ['/admin', 'opened', '/admin'],
+    ['/settings', 'not visited', null],
+    ['/meetings/:id/live', 'unsafe', null],
+    ['/reports/:id', 'no-id', null],
+  ]);
+  const md = renderSiteMap(map);
+  assert.ok(md.includes('## Routes from JS bundle'));
+  assert.ok(md.includes('3 relative route(s)'));
+  assert.equal(renderSiteMap(siteMap([pageVisit('admin', '/')])).includes('## Routes from JS bundle'), false);
+});
+
 test('a single-role crawl has no access matrix', () => {
   const map = siteMap([pageVisit('default', '/')], { roles: ['default'], pagesVisited: { default: 1 } });
   assert.deepEqual(map.access, {});

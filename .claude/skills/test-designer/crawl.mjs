@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // crawl.mjs — multi-page, multi-role exploration driver for the test-designer skill (phase 1).
 //
-// Logs each role in, walks same-origin links breadth-first (plus sitemap.xml), groups URLs
+// Logs each role in, walks same-origin links breadth-first (plus sitemap.xml and routes
+// declared in the SPA's JS bundle), groups URLs
 // into route templates, captures one representative page per template, probes files
 // without downloading them, then checks which role can open which template.
 // Read-only by design: it follows links, never clicks or submits, skips URLs that look
@@ -11,7 +12,7 @@
 // Usage:  node .claude/skills/test-designer/crawl.mjs <url> [--roles admin,user]
 //           [--max-pages 200] [--max-depth 5] [--concurrency 3] [--delay-ms 250]
 //           [--samples 3] [--slug-threshold 20] [--max-minutes 15]
-//           [--exclude <regex>]... [--allow <regex>]...
+//           [--exclude <regex>]... [--allow <regex>]... [--no-bundle-routes]
 // Roles default to WEBTEST_ROLES, else a single 'default' role (TEST_EMAIL/TEST_PASSWORD);
 // role X reads TEST_X_EMAIL/TEST_X_PASSWORD. Env comes from the shell, .env.<host>, .env.
 //
@@ -28,6 +29,7 @@ import { parseArgs } from 'node:util';
 import { login, LoginError, missingCredentials } from './lib/auth.mjs';
 import { bundleDir, hostOf, loadEnv } from './lib/bundle.mjs';
 import { capturePage, probeFile, renderExploration } from './lib/capture.mjs';
+import { extractRoutes, instantiate, scriptUrls } from './lib/route-discovery.mjs';
 import { buildSiteMap, renderSiteMap } from './lib/site-map.mjs';
 import { isFileUrl, isUnsafe, normalizeUrl, TemplateIndex } from './lib/url-template.mjs';
 
@@ -44,6 +46,7 @@ const { values: args, positionals } = parseArgs({
     'max-minutes': { type: 'string', default: '15' },
     exclude: { type: 'string', multiple: true, default: [] },
     allow: { type: 'string', multiple: true, default: [] },
+    'no-bundle-routes': { type: 'boolean', default: false },
   },
 });
 const startUrl = positionals[0];
@@ -74,6 +77,7 @@ const config = {
   loginPath: process.env.WEBTEST_LOGIN_PATH || '/login',
   exclude: args.exclude,
   allow: args.allow,
+  bundleRoutes: !args['no-bundle-routes'],
 };
 const filters = {
   exclude: config.exclude.map((pattern) => new RegExp(pattern, 'i')),
@@ -102,6 +106,7 @@ const state = {
   unsafeSkipped: new Set(),
   externalOrigins: new Set(),
   visits: [],
+  bundle: null,
 };
 const fullCaptures = new Set(); // templates that already have a screenshot + exploration.md
 const deadline = Date.now() + config.maxMinutes * 60_000;
@@ -112,6 +117,8 @@ process.on('SIGINT', () => {
 
 const UNGUARDED_TYPES = new Set(['script', 'stylesheet', 'font']);
 const SCREENSHOT_TIMEOUT_MS = 15_000;
+const MAX_SCRIPTS = 20;
+const MAX_SCRIPT_BYTES = 10 * 1024 * 1024;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const isBusy = (record) => record.status === 429 || record.status === 503;
 const failedVisit = (role, url, kind, probe, error) => ({
@@ -248,6 +255,43 @@ async function sitemapUrls(context) {
   return (await Promise.all(nested.map(read))).flatMap((sitemap) => sitemap.urls);
 }
 
+/** Routes declared in the start page's own scripts (see lib/route-discovery.mjs). */
+async function discoverRoutes(browser, statePath) {
+  const context = await browser.newContext({ baseURL: origin, storageState: statePath });
+  try {
+    const shell = await context.request.get(startUrl, { failOnStatusCode: false });
+    const scripts = scriptUrls(await shell.text(), shell.url()).slice(0, MAX_SCRIPTS);
+    const routes = new Set();
+    let relative = 0;
+    for (const url of scripts) {
+      const response = await context.request.get(url, { failOnStatusCode: false });
+      // Oversized scripts are not parsed; routes live in the app bundle, not in vendor blobs.
+      if (!response.ok() || Number(response.headers()['content-length'] ?? 0) > MAX_SCRIPT_BYTES) continue;
+      const found = extractRoutes(await response.text());
+      found.routes.forEach((route) => routes.add(route));
+      relative += found.relative;
+    }
+    return { scripts: scripts.length, relative, routes: [...routes].map((route) => ({ route, url: null, outcome: 'pending' })) };
+  } catch (error) {
+    console.warn(`route discovery failed: ${error.message}`);
+    return null;
+  } finally {
+    await context.close();
+  }
+}
+
+/** Turn a bundle route into a URL to crawl, or record why it will not be opened. */
+function resolveBundleRoute(entry, seenPaths) {
+  const route = instantiate(entry.route, seenPaths);
+  if (route === null) {
+    entry.outcome = 'no-id';
+    return;
+  }
+  entry.url = normalizeUrl(route, startUrl);
+  if (intake(route, startUrl) !== null) entry.outcome = 'queued';
+  else entry.outcome = new URL(entry.url).pathname === config.loginPath ? 'login-page' : 'unsafe';
+}
+
 /** Breadth-first crawl as one role, `config.concurrency` pages at a time. */
 async function crawlRole(browser, role, statePaths) {
   console.log(`crawling as ${role}...`);
@@ -268,6 +312,21 @@ async function crawlRole(browser, role, statePaths) {
     if (url === null || depth > config.maxDepth || queued.has(url)) return;
     queued.add(url);
     queue.push({ url, depth });
+  };
+  // Bundle routes with :params are retried whenever the queue runs dry, since the pages
+  // crawled so far may have revealed an id to fill them with. Returns how many were queued.
+  const enqueueBundleRoutes = () => {
+    if (!state.bundle) return 0;
+    const seenPaths = [...index.groups().values()].flat().map((url) => new URL(url).pathname);
+    let added = 0;
+    for (const entry of state.bundle.routes) {
+      if (entry.outcome === 'pending' || entry.outcome === 'no-id') resolveBundleRoute(entry, seenPaths);
+      if (entry.outcome === 'queued' && !queued.has(entry.url)) {
+        enqueue(entry.url, 1);
+        added += 1;
+      }
+    }
+    return added;
   };
   // Undo a visit made with a dead session and queue the URL again.
   const forget = (item, record) => {
@@ -342,8 +401,8 @@ async function crawlRole(browser, role, statePaths) {
     while (!shouldStop() && !roleStop) {
       const item = queue.shift();
       if (!item) {
-        if (active === 0) return;
-        await sleep(50);
+        if (active === 0 && enqueueBundleRoutes() === 0) return;
+        if (active > 0) await sleep(50);
         continue;
       }
       const sampleKey = index.templateOf(item.url);
@@ -370,6 +429,7 @@ async function crawlRole(browser, role, statePaths) {
   try {
     enqueue(intake(startUrl, startUrl), 0);
     for (const url of await sitemapUrls(context)) enqueue(intake(url, startUrl), 1);
+    enqueueBundleRoutes();
     await Promise.all(Array.from({ length: config.concurrency }, worker));
   } finally {
     state.pagesVisited[role] = visited;
@@ -437,6 +497,7 @@ try {
 
 let siteMap;
 try {
+  if (config.bundleRoutes) state.bundle = await discoverRoutes(browser, statePaths[config.roles[0]]);
   for (const role of config.roles) {
     if (shouldStop()) break;
     await crawlRole(browser, role, statePaths);

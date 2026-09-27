@@ -90,6 +90,19 @@ export function buildSiteMap(state, index) {
     return { template, type, text, count };
   });
 
+  // A queued bundle route is 'opened' once any role visited its URL.
+  const bundleRoutes = state.bundle
+    ? {
+      scripts: state.bundle.scripts,
+      relative: state.bundle.relative,
+      routes: state.bundle.routes.map(({ route, url, outcome }) => {
+        const opened = outcome === 'queued' && state.visits.some((v) => v.url === url);
+        const result = outcome === 'queued' ? (opened ? 'opened' : 'not visited') : outcome;
+        return { route, url, outcome: result, template: opened ? index.templateOf(url) : null };
+      }),
+    }
+    : null;
+
   const navErrors = state.visits
     .map((v) => ({ url: v.url, role: v.role, text: v.navError ?? v.errors.find((e) => e.type === 'nav-error')?.text }))
     .filter((e) => e.text);
@@ -105,6 +118,7 @@ export function buildSiteMap(state, index) {
     templates,
     access,
     health,
+    bundleRoutes,
     warnings: {
       skeletonMismatch: templates.filter((t) => t.skeletonMismatch).map((t) => t.template),
       unsafeSkipped: { count: state.unsafeSkipped.length, examples: state.unsafeSkipped.slice(0, EXAMPLE_LIMIT) },
@@ -144,6 +158,20 @@ function renderAccess(map) {
       row.kind === 'file' ? `${row.template} [file]` : row.template,
       ...values,
     ])),
+  ];
+}
+
+function renderBundleRoutes(bundle) {
+  if (!bundle) return [];
+  const relative = bundle.relative
+    ? ` ${bundle.relative} relative route(s) skipped: their parent path cannot be recovered from the bundle.`
+    : '';
+  return [
+    '## Routes from JS bundle',
+    `Found in ${bundle.scripts} script(s). Routes are opened like links; \`unsafe\` ones and \`no-id\` ones (a :param no seen page could fill) are listed only.${relative}`,
+    bundle.routes.length
+      ? table(['Route', 'Result', 'Template'], bundle.routes.map((r) => [r.route, r.outcome, r.template]))
+      : '_No routes found._',
   ];
 }
 
@@ -196,6 +224,7 @@ export function renderSiteMap(map) {
       )
       : '_No files found._',
     ...renderAccess(map),
+    ...renderBundleRoutes(map.bundleRoutes),
     '## Health',
     map.health.length
       ? table(['Template', 'Type', 'Message', 'Count'], map.health.map((h) => [h.template, h.type, firstLine(h.text), h.count]))

@@ -97,6 +97,22 @@ describe('crawl as admin and user', () => {
     assert.ok(md.includes('## Access matrix'));
   });
 
+  test('opens routes found only in the JS bundle, fills params, skips unsafe ones', () => {
+    assert.ok(row('/hidden-route'));
+    assert.ok(row('/orders/:id/receipt'));
+    assert.ok(!fixture.requests.some((request) => request.path.endsWith('/live')));
+    const outcomes = Object.fromEntries(map.bundleRoutes.routes.map((r) => [r.route, r.outcome]));
+    assert.deepEqual(outcomes, {
+      '/hidden-route': 'opened',
+      '/orders/:id/receipt': 'opened',
+      '/orders/:id/live': 'unsafe',
+      '/reports/:reportId': 'no-id',
+      '/team': 'opened',
+    });
+    assert.equal(map.bundleRoutes.relative, 1);
+    assert.ok(readFileSync(path.join(run.crawlDir, 'site-map.md'), 'utf8').includes('## Routes from JS bundle'));
+  });
+
   test('reports skipped unsafe URLs and external origins', () => {
     assert.ok(map.warnings.unsafeSkipped.examples.includes(`${fixture.url}/logout`));
     assert.equal(map.warnings.externalOrigins, 1);
@@ -166,6 +182,18 @@ describe('crawl failures and limits', () => {
     assert.deepEqual(map.limitWarnings, []);
     assert.equal(map.access['/admin'].user, 'login-redirect');
     assert.ok(!map.templates.some((row) => row.template === '/login'), 'the login page is never crawled');
+  });
+
+  test('--no-bundle-routes turns route discovery off', async (t) => {
+    const fixture = await startFixture();
+    t.after(() => fixture.close());
+
+    const run = await runCrawl(fixture, ['--no-bundle-routes'], { WEBTEST_ROLES: 'admin', ...CREDENTIALS });
+    const map = run.siteMap();
+
+    assert.equal(run.code, 0, run.stderr);
+    assert.equal(map.bundleRoutes, null);
+    assert.ok(!map.templates.some((row) => row.template === '/hidden-route'));
   });
 
   test('persistent 429 stops the role with a warning', async (t) => {

@@ -17,6 +17,18 @@ export const PRODUCT_SLUGS = Array.from(
 );
 
 const CHUNK = Buffer.alloc(64 * 1024, 37);
+// The SPA bundle the home page loads: routes no link points to, plus path strings that are
+// not routes (a socket.io option, a docx part name).
+const APP_BUNDLE = `window.__routes = [
+  { path: "/hidden-route", element: "Hidden" },
+  { path: "/orders/:id/receipt", element: "Receipt" },
+  { path: "/orders/:id/live", element: "Live" },
+  { path: "/reports/:reportId", element: "Report" },
+  { path: "/team", children: [{ path: "members", element: "Members" }] },
+  { path: "*", element: "NotFound" },
+];
+window.__io = { path: "/engine.io", agent: false };
+window.__docx = { data: "", path: "word/document.xml" };`;
 const PUBLIC_PATHS = new Set([
   '/login', '/login2', '/login-sso', '/oauth/google', '/public', '/long-poll', '/never-ends', '/no-form',
   '/go-export',
@@ -67,7 +79,7 @@ function home(role, { slowFontHome, denyByRedirect }) {
 <a href="/admin/audit">Audit</a></div> <a href="/login?next=/orders">Switch account</a>`
     : '';
   const font = slowFontHome ? '<style>@font-face{font-family:slow;src:url(/never-ends)} body{font-family:slow}</style>' : '';
-  return html('Home', `${font}${deniedLinks}<header><nav>
+  return html('Home', `${font}${deniedLinks}<script type="module" src="/assets/app.js"></script><header><nav>
 <a href="/orders">Orders</a> <a href="/products">Products</a> <a href="/broken">Broken</a> ${adminLinks}
 <a href="/docs/manual.pdf">Manual</a> <a href="/files/get?id=3">Export file</a>
 <a href="/legacy/report.pdf">Legacy report</a> <a href="/docs/missing.pdf">Missing</a>
@@ -171,6 +183,7 @@ export async function startFixture({
     }
 
     const order = /^\/orders\/(\d+)$/.exec(pathname);
+    const receipt = /^\/orders\/(\d+)\/receipt$/.exec(pathname);
     const product = /^\/products\/([\w-]+)$/.exec(pathname);
     const invoice = /^\/invoices\/(\d+)\.pdf$/.exec(pathname);
     const origin = `http://${req.headers.host}`;
@@ -198,6 +211,9 @@ export async function startFixture({
       const trap = order[1] === '1' ? '<img src="/logout" alt="">' : '';
       return send(200, html(`Order ${order[1]}`, `<main><h1>Order ${order[1]}</h1><button>Refund</button>${trap}</main>`));
     }
+    if (receipt) return send(200, html(`Receipt ${receipt[1]}`, `<main><h1>Receipt ${receipt[1]}</h1></main>`));
+    if (pathname === '/assets/app.js') return send(200, APP_BUNDLE, 'text/javascript');
+    if (pathname === '/team' || pathname === '/team/members') return send(200, html('Team', '<main><p>Team</p></main>'));
     if (pathname === '/products') {
       const links = PRODUCT_SLUGS.map((slug) => `<a href="/products/${slug}">${slug}</a>`);
       return send(200, html('Products', `<main>${links.join(' ')}</main>`));
@@ -210,7 +226,7 @@ export async function startFixture({
     if (pathname === '/broken') {
       return send(200, html('Broken', "<main><p>Broken</p></main><script>console.error('fixture-error')</script>"));
     }
-    if (pathname === '/hidden-menu' || pathname === '/sitemap-only') {
+    if (pathname === '/hidden-menu' || pathname === '/sitemap-only' || pathname === '/hidden-route') {
       return send(200, html(pathname.slice(1), `<main><p>${pathname}</p></main>`));
     }
     if (pathname === '/admin' || pathname.startsWith('/admin/') || pathname === '/invoices') {
