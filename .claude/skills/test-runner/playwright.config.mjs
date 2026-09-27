@@ -5,6 +5,7 @@
 //   → testDir artifacts/brse.ai/tests, outputs artifacts/brse.ai/{html-report,results.json,test-results}
 import { defineConfig, devices } from '@playwright/test';
 import path from 'node:path';
+import { loadEnv } from '../test-designer/lib/bundle.mjs';
 
 const root = process.cwd(); // the project being tested
 const base = process.env.BASE_URL;
@@ -14,6 +15,8 @@ const base = process.env.BASE_URL;
 const rawHost = process.env.WEBTEST_HOST || (base ? new URL(base).host : '');
 const host = rawHost.replace(/[^a-z0-9.-]/gi, '_');
 const outDir = path.join(root, 'artifacts', host); // host '' → artifacts/ (no specs found)
+// Credentials (TEST_EMAIL/TEST_PASSWORD...) from .env.<host>, then .env; the shell wins.
+loadEnv(host, root);
 
 export default defineConfig({
   testDir: path.join(outDir, 'tests'),

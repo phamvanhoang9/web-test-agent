@@ -5,8 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this repo is
 
 `web-test-agent` is not an application — it is a **skill-driven E2E testing workflow**. The
-"code" is four project-local Claude skills under `.claude/skills/` plus three Node scripts
-they drive. It tests *other* websites black-box, from nothing but a URL. There is no source
+"code" is four project-local Claude skills under `.claude/skills/` plus the Node scripts
+they drive (`explore.mjs`, `crawl.mjs`, `report.mjs`) and a small shared `test-designer/lib/`. It tests *other* websites black-box, from nothing but a URL. There is no source
 code of the target under test here.
 
 ## Commands
@@ -17,6 +17,9 @@ npm install && npx playwright install chromium     # one-time setup
 # 1 DESIGN — explore a live site, write evidence into artifacts/<host>/
 node .claude/skills/test-designer/explore.mjs https://example.com
 node .claude/skills/test-designer/explore.mjs https://example.com --steps steps.json
+node .claude/skills/test-designer/crawl.mjs https://example.com   # multi-page, multi-role -> crawl/site-map.md
+
+npm run test:unit                                  # node --test for the skill scripts (no target site needed)
 
 # 3 GENERATE — no command; the agent authors artifacts/<host>/tests/*.spec.mjs
 
@@ -71,7 +74,7 @@ mix both. Use `MCP` for heavy dynamic DOM, canvas/drag, or anything needing live
 
 `BASE_URL` is the single knob. Its host, sanitized with `replace(/[^a-z0-9.-]/gi, '_')`, names
 the per-domain bundle `artifacts/<host>/` — so `localhost:3000` maps to `artifacts/localhost_3000/`.
-That same sanitization is duplicated in [explore.mjs](.claude/skills/test-designer/explore.mjs),
+That same sanitization is duplicated in [lib/bundle.mjs](.claude/skills/test-designer/lib/bundle.mjs) (used by explore and crawl),
 [playwright.config.mjs](.claude/skills/test-runner/playwright.config.mjs), and
 [report.mjs](.claude/skills/test-runner/report.mjs) — if you change one, change all three or
 the phases will write and read different folders. `WEBTEST_HOST` overrides the derived host.
@@ -123,3 +126,8 @@ in the denominator. `WAIVED` is a human override only.
   `.claude/skills/test-runner/resources/knowledge/media-capture-cases.md`.
 - An MCP case that writes real data on staging must be cleaned up by the agent right after the
   verdict is recorded — nothing enforces it the way a Playwright fixture would.
+- `crawl.mjs` is read-only by construction: it follows links only, skips URLs whose path or
+  query contains logout/delete/export-style words, and aborts such requests made by pages
+  themselves. `artifacts/<host>/.auth/<role>.json` holds live session tokens.
+- `.env.<host>` then `.env` are loaded by `crawl.mjs` and `playwright.config.mjs` (shell wins);
+  `explore.mjs` reads no credentials.

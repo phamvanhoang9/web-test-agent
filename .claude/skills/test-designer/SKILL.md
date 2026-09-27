@@ -17,7 +17,7 @@ Run from the project root. `<host>` = the URL's host (e.g. `brse.ai`).
    chrome-devtools MCP (`MCP`) for cases Playwright handles poorly (heavy dynamic DOM,
    canvas/drag, things that need live inspection).
 
-## Explore — two ways, by difficulty
+## Explore — three ways, by difficulty
 
 **Default — Playwright headless** (fast, captures evidence to `artifacts/<host>/`):
 ```bash
@@ -27,6 +27,29 @@ Writes `exploration.md` (redirects, status, console errors, failed requests, out
 of every field/button/link), `screenshot.png` (**open and look**), `console.json`,
 `network.json`. Reach a page behind a click/login with `--steps steps.json` (array of
 `{fill|click|waitFor|goto}`).
+
+**Large site, or most of it behind a login — crawl first:**
+```bash
+node .claude/skills/test-designer/crawl.mjs https://app.example.com
+```
+Logs in as each role in `WEBTEST_ROLES` (credentials `TEST_<ROLE>_EMAIL` /
+`TEST_<ROLE>_PASSWORD`, or `TEST_EMAIL` / `TEST_PASSWORD` for the default role — from the
+shell, `.env.<host>`, then `.env`; login page `WEBTEST_LOGIN_PATH`, default `/login`),
+follows same-origin links and `sitemap.xml`, groups URLs into route templates
+(`/orders/:id`), and writes `artifacts/<host>/crawl/site-map.md`. Read it before anything else:
+- **Warnings at the top** mean coverage is incomplete (page or time limit, rate limiting, a
+  session that kept expiring). Say so in the plan.
+- **Templates / Files** are the feature areas; `URLs seen` shows how big each is. Open
+  `crawl/pages/<...>/exploration.md` (and its screenshot) only for templates you judge risky.
+- **Access matrix** rows where roles differ are authorization cases (P0/P1). A `[file]` row
+  that differs is a data-exposure risk (P0); also propose an ID-swap (IDOR) case — the crawler
+  never tries other IDs.
+- **Skipped URLs** under Warnings were never opened because they look state-changing (logout,
+  delete, export...). If one is safe and matters, rerun with `--allow <regex>`.
+
+It only follows links — never clicks or submits — so it is safe on production. Limits:
+`--max-pages` 200 per role, `--max-depth` 5, `--max-minutes` 15, `--delay-ms` 250,
+`--samples` 3 per template.
 
 **When that's not enough — chrome-devtools MCP** (interactive, for auth-gated / heavy
 SPA / dynamic content): drive the real browser to understand the flow before writing
@@ -57,3 +80,9 @@ review/edit the table (human gate) before script-generator runs.
   it still captures what loaded and logs the nav error. Switch to chrome-devtools MCP for those.
 - Empty button label in the outline = icon-only button; identify by `aria-label`, not text.
 - Note staging vs production in the plan; data-mutating cases belong on staging.
+- `crawl.mjs` login fails with `field-not-found`: the form is not at `/login` — set
+  `WEBTEST_LOGIN_PATH`. SSO and MFA are not supported; use chrome-devtools MCP for those.
+- The crawler aborts requests a page itself makes to a state-changing URL, but a server-side
+  redirect to one is not guaranteed to be caught. Keep `--exclude` for known dangerous paths.
+- `artifacts/<host>/.auth/*.json` holds live session tokens. It is gitignored with the rest of
+  `artifacts/`; never copy it elsewhere.
