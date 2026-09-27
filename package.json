@@ -7,6 +7,7 @@
   "scripts": {
     "explore": "node .claude/skills/test-designer/explore.mjs",
     "test": "playwright test --config .claude/skills/test-runner/playwright.config.mjs",
+    "test:unit": "node --test \".claude/skills/**/*.test.mjs\"",
     "gate": "node .claude/skills/test-runner/report.mjs"
   },
   "devDependencies": {
