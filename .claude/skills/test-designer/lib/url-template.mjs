@@ -6,7 +6,7 @@ const TRACKING_PARAM = /^(utm_.+|gclid|fbclid)$/i;
 const UNSAFE_WORDS = [
   'logout', 'log-out', 'signout', 'sign-out', 'logoff', 'delete', 'remove', 'destroy',
   'unsubscribe', 'cancel', 'revoke', 'deactivate', 'disable', 'archive', 'reset', 'export',
-  'generate',
+  'generate', 'live', 'callback',
 ];
 const FILE_EXTENSIONS = new Set([
   'pdf', 'csv', 'xls', 'xlsx', 'doc', 'docx', 'ppt', 'pptx', 'zip', 'gz', 'tar', 'rar', '7z',

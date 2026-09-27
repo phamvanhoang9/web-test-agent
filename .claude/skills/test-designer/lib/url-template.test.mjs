@@ -51,6 +51,13 @@ test('isUnsafe blocks underscore, path-parameter and camelCase logout forms', ()
   }
 });
 
+test('isUnsafe blocks live sessions and auth callbacks', () => {
+  for (const pathname of ['/auth/callback', '/meetings/9c57/live', '/live-session']) {
+    assert.equal(isUnsafe(`https://app.test${pathname}`), true, pathname);
+  }
+  assert.equal(isUnsafe('https://app.test/delivery'), false);
+});
+
 test('isUnsafe allows look-alike words', () => {
   for (const pathname of ['/', '/orders/42', '/deleted-items', '/deletedItems', '/tools/bg-remover', '/exports']) {
     assert.equal(isUnsafe(`https://app.test${pathname}`), false, pathname);
