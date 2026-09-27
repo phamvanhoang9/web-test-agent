@@ -61,7 +61,7 @@ flowchart LR
     G -->|*.spec.mjs| R[4 · RUN + GATE<br/>test-runner]
     R -->|PASS / CONCERNS / BLOCKED| OK([quality-gate.md])
     R -->|FAIL| S[5 · HEAL<br/>self-healer]
-    S -->|proposed diff| H2{approval}
+    S -->|proposed fix| H2{approval}
     H2 --> R
 
     style H fill:#fff4e6,stroke:#d97757,stroke-width:2px
@@ -71,7 +71,7 @@ flowchart LR
 
 Two points in that loop are **human gates**, marked in orange. The workflow stops at both.
 It will not generate specs from a plan you have not approved, and the healer will not edit a
-spec without showing you the diff first. Everything else runs unattended.
+spec without first explaining, in plain language, what it will change. Everything else runs unattended.
 
 ## Quick start
 
@@ -137,7 +137,7 @@ npx playwright show-report artifacts/example.com/html-report
 | 2 | REVIEW | *human* | You edit and approve the test-case table. It is the source of truth downstream | the edited table |
 | 3 | GENERATE | [`script-generator`](.claude/skills/script-generator/SKILL.md) | Turns each `Tool=PW` row into an idiomatic Playwright test | `tests/*.spec.mjs` |
 | 4 | RUN + GATE | [`test-runner`](.claude/skills/test-runner/SKILL.md) | Runs the specs, drives `Tool=MCP` cases live, merges both, decides the gate, reports back | `results.json`, `mcp-results.json`, `quality-gate.md`, `html-report/` |
-| 5 | HEAL | [`self-healer`](.claude/skills/self-healer/SKILL.md) | On failure only: reproduces on the live page, separates real bugs from broken scripts, proposes a diff | proposed spec edits, pending approval |
+| 5 | HEAL | [`self-healer`](.claude/skills/self-healer/SKILL.md) | On failure only: reproduces on the live page, separates real bugs from broken scripts, explains each fix in plain language | `heal-proposal.md`, pending approval |
 
 [`web-test`](.claude/skills/web-test/SKILL.md) is the orchestrator that sequences them;
 [`checklist.md`](.claude/skills/web-test/checklist.md) is the exit criteria to run through
@@ -270,7 +270,7 @@ The parts of this workflow that exist to keep it honest:
 - **A failing test is a hypothesis, not a verdict.** The healer reproduces on the live page
   and decides whether it found a real application bug or a broken script. A real bug gets
   reported with evidence. It is never "healed" into passing.
-- **Nothing is applied without approval.** The healer proposes a diff and waits.
+- **Nothing is applied without approval.** The healer explains the fix in plain language and waits.
 - **Locators are role- and label-based.** `getByRole` and `getByLabel` over brittle CSS;
   web-first assertions over `waitForTimeout` as a synchronisation mechanism. See
   [`selector-resilience.md`](.claude/skills/script-generator/resources/knowledge/selector-resilience.md).

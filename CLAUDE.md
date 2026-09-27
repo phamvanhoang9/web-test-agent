@@ -53,8 +53,9 @@ to the next. `.claude/skills/web-test/SKILL.md` is the map, `checklist.md` the e
 3. **script-generator** — reads the TC table, emits one `test()` per `Tool=PW` row.
 4. **test-runner** — runs the specs, *and* drives `Tool=MCP` rows itself via chrome-devtools
    MCP, then `report.mjs` merges both into the gate decision.
-5. **self-healer** — only on failure. Diagnoses on the live page, **proposes a diff and waits
-   for approval**; it never auto-edits a spec.
+5. **self-healer** — only on failure. Diagnoses on the live page, **explains each fix in plain
+   language (never a diff — the reader is a tester) and waits for approval**; it never
+   auto-edits a spec.
 
 ### The test-plan table is the contract
 
@@ -116,8 +117,9 @@ in the denominator. `WAIVED` is a human override only.
 - `report.mjs` works from `mcp-results.json` alone when a plan has no `PW` rows.
 - chrome-devtools MCP is configured in `.mcp.json` (the leading dot matters — Claude Code only
   reads project-scoped servers from `.mcp.json`, and a server only loads at session start);
-  if it isn't connected, run the `PW` cases,
-  report the `MCP` ones as skipped, and say so explicitly. It also passes
+  if it isn't connected, drive the `MCP` cases with a scratch Playwright script (fake media
+  flags for microphone/screen cases) rather than skipping them; `Tool=MCP` cases never wait for
+  a confirmation. It also passes
   `--chrome-arg=--use-fake-ui-for-media-stream` and
   `--chrome-arg=--auto-select-desktop-capture-source=Entire screen` so the native screen-share
   picker is answered automatically.
