@@ -86,6 +86,8 @@ Then drive the phases. `BASE_URL` is the only knob you need:
 node .claude/skills/test-designer/explore.mjs https://example.com
 #     large or login-gated site: crawl it instead (roles and credentials from .env)
 node .claude/skills/test-designer/crawl.mjs https://example.com
+#     after the agent writes test-plan.md: every route and control covered? (exit 1 = gaps)
+node .claude/skills/test-designer/coverage.mjs https://example.com
 
 # 2 · review and edit artifacts/example.com/test-plan.md  (your call, not the agent's)
 
@@ -131,7 +133,7 @@ npx playwright show-report artifacts/example.com/html-report
 
 | # | Phase | Skill | What happens | Output |
 |---|---|---|---|---|
-| 1 | DESIGN | [`test-designer`](.claude/skills/test-designer/SKILL.md) | Drives headless Chromium over the live site, captures evidence, scores risk (probability x impact), writes a test plan | `test-plan.md`, `exploration.md`, `screenshot.png`, `console.json`, `network.json`; with the crawler, `crawl/site-map.md` |
+| 1 | DESIGN | [`test-designer`](.claude/skills/test-designer/SKILL.md) | Drives headless Chromium over the live site, captures evidence, scores risk (probability x impact), writes a test plan that covers every route and control it found (`coverage.mjs` checks) | `test-plan.md`, `coverage.md`, `exploration.md`, `screenshot.png`, `console.json`, `network.json`; with the crawler, `crawl/site-map.md` |
 | 2 | REVIEW | *human* | You edit and approve the test-case table. It is the source of truth downstream | the edited table |
 | 3 | GENERATE | [`script-generator`](.claude/skills/script-generator/SKILL.md) | Turns each `Tool=PW` row into an idiomatic Playwright test | `tests/*.spec.mjs` |
 | 4 | RUN + GATE | [`test-runner`](.claude/skills/test-runner/SKILL.md) | Runs the specs, drives `Tool=MCP` cases live, merges both, decides the gate, reports back | `results.json`, `mcp-results.json`, `quality-gate.md`, `html-report/` |
@@ -226,6 +228,7 @@ artifacts/example.com/
 ├── screenshot.png       # regenerated
 ├── console.json         # regenerated — console errors and warnings
 ├── network.json         # regenerated — request log, failures flagged
+├── coverage.md          # regenerated — what the plan covers, gaps first
 ├── crawl/               # regenerated — crawl.mjs output
 │   ├── site-map.md      #   templates, files, access matrix, bundle routes, health, warnings
 │   ├── site-map.json    #   the same, untruncated

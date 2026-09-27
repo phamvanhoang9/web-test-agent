@@ -11,8 +11,10 @@ Run from the project root. `<host>` = the URL's host (e.g. `brse.ai`).
 
 ## What to achieve
 1. **Explore the live site** to learn what actually exists (don't guess test cases).
-2. **Assess risk** (probability × impact) and turn the riskiest behaviours into test
-   cases — don't pad the plan with cases no risk justifies.
+2. **Cover everything exploration found.** Every route and every labelled field, button and
+   link gets a test case, or a line in the plan's "không test (và lý do)" section saying why
+   not. Risk (probability × impact) sets each case's **priority**, not whether it exists — a
+   cosmetic control is a P3 case, not a missing one.
 3. **Pick the execution tool per case**: Playwright (`PW`) for deterministic checks;
    chrome-devtools MCP (`MCP`) for cases Playwright handles poorly (heavy dynamic DOM,
    canvas/drag, things that need live inspection).
@@ -65,6 +67,11 @@ cases — `mcp__chrome-devtools__navigate_page`, `take_snapshot`, `click`, `fill
 `list_console_messages`, `list_network_requests`. Use what you learn to fill the plan,
 and mark those cases `Tool=MCP`.
 
+**Then look behind the clicks.** The crawler never clicks, so dialogs, menus and panels are
+not in its outlines. Open each one (Start/Create buttons, user menu, Delete, Share, Feedback,
+Edit...) and **cancel** it — never submit — to learn its fields and validation messages. A
+throwaway Playwright script in your scratchpad, or chrome-devtools MCP, both work.
+
 ## Write the plan
 Copy the template and fill it from the exploration:
 ```bash
@@ -76,11 +83,25 @@ cp .claude/skills/test-designer/templates/test-cases.template.md artifacts/<host
   Multi-step "Các bước" separated by `;`. Choose `PW` or `MCP` per row.
 - Push each check to the lowest level that proves it (`resources/knowledge/test-levels.md`).
 - Cover the categories in the coverage checklist; if you skip one, say why.
+- Write a control's **label as the page shows it** ("Search by keyword...", "Export DOCX") in
+  "Các bước" or "Kỳ vọng" — the coverage check matches on it. Routes are written as paths
+  (`/meetings/<id>` covers `/meetings/:id`).
+
+## Check coverage (required before hand-off)
+```bash
+node .claude/skills/test-designer/coverage.mjs https://app.example.com
+```
+Compares the plan against `exploration.md`, `crawl/site-map.json` and every
+`crawl/pages/*/exploration.md`, and writes `artifacts/<host>/coverage.md`. It exits **1** while
+any route or labelled control is in neither a TC row nor the "không test" section — add the
+case, or the reason, and rerun until it exits 0. Icon-only controls cannot be matched by name;
+they are listed under "Unlabeled controls" for you to check by hand. The check only knows what
+exploration recorded: what sits behind a click is still yours to find.
 
 Worked example: `examples/brse.ai.plan.md`.
 
 ## Hand off
-Tell the user the plan is ready at `artifacts/<host>/test-plan.md` and ask them to
+Once `coverage.mjs` exits 0, tell the user the plan is ready at `artifacts/<host>/test-plan.md` and ask them to
 review/edit the table (human gate) before script-generator runs.
 
 ## Gotchas

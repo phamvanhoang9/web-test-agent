@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `web-test-agent` is not an application — it is a **skill-driven E2E testing workflow**. The
 "code" is four project-local Claude skills under `.claude/skills/` plus the Node scripts
-they drive (`explore.mjs`, `crawl.mjs`, `report.mjs`) and a small shared `test-designer/lib/`. It tests *other* websites black-box, from nothing but a URL. There is no source
+they drive (`explore.mjs`, `crawl.mjs`, `coverage.mjs`, `report.mjs`) and a small shared `test-designer/lib/`. It tests *other* websites black-box, from nothing but a URL. There is no source
 code of the target under test here.
 
 ## Commands
@@ -18,6 +18,7 @@ npm install && npx playwright install chromium     # one-time setup
 node .claude/skills/test-designer/explore.mjs https://example.com
 node .claude/skills/test-designer/explore.mjs https://example.com --steps steps.json
 node .claude/skills/test-designer/crawl.mjs https://example.com   # multi-page, multi-role -> crawl/site-map.md
+node .claude/skills/test-designer/coverage.mjs https://example.com  # plan vs exploration -> coverage.md; exit 1 = gaps
 
 npm run test:unit                                  # node --test for the skill scripts (no target site needed)
 

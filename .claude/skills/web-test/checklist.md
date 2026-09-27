@@ -7,6 +7,8 @@ DESIGN — test-designer (`artifacts/<host>/test-plan.md`)
 - [ ] Risks scored (probability × impact); every score ≥6 maps to a covering TC
 - [ ] TC table filled: each row has P, **Tool (PW/MCP)**, steps, **verifiable** Kỳ vọng
 - [ ] Coverage checklist reviewed — no whole category silently skipped
+- [ ] Opened (and cancelled) every dialog, menu and panel the crawler could not click into
+- [ ] `coverage.mjs` exits 0: every route and labelled control maps to a TC or a line in "không test (và lý do)"
 - [ ] User reviewed/approved the table (human gate) before generating
 
 GENERATE — script-generator (`artifacts/<host>/tests/*.spec.mjs`)
