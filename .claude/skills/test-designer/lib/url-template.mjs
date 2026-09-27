@@ -62,3 +62,69 @@ export function isFileUrl(url) {
   const [, extension] = splitExtension(pathname.slice(pathname.lastIndexOf('/') + 1));
   return FILE_EXTENSIONS.has(extension.slice(1).toLowerCase());
 }
+
+const DYNAMIC_SEGMENT = [
+  /^\d+$/,
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+  /^[0-9a-f]{16,}$/i,
+  /^\d{4}-\d{2}-\d{2}$/,
+];
+
+/**
+ * Groups URLs into route templates. A segment that looks like an id (number, UUID, long
+ * hex, date) becomes ':id'. Below the first level, once a parent has more than
+ * `slugThreshold` distinct non-id children they all become ':slug' — URLs added earlier
+ * regroup too, because templates are recomputed from the current state on every call.
+ * Top-level segments never collapse: /about and /pricing are different pages. The query
+ * never takes part; the file extension is kept (/invoices/:id.pdf).
+ */
+export class TemplateIndex {
+  #children = new Map();
+  #urls = [];
+  #seen = new Set();
+
+  constructor({ slugThreshold = 20 } = {}) {
+    this.slugThreshold = slugThreshold;
+  }
+
+  #walk(url, record) {
+    let prefix = '';
+    for (const segment of new URL(url).pathname.split('/').filter(Boolean)) {
+      const [stem, extension] = splitExtension(segment);
+      let part = stem;
+      if (DYNAMIC_SEGMENT.some((pattern) => pattern.test(stem))) {
+        part = ':id';
+      } else {
+        let siblings = this.#children.get(prefix);
+        if (record) {
+          if (!siblings) this.#children.set(prefix, (siblings = new Set()));
+          siblings.add(stem);
+        }
+        if (prefix !== '' && siblings && siblings.size > this.slugThreshold) part = ':slug';
+      }
+      prefix += `/${part}${extension}`;
+    }
+    return prefix || '/';
+  }
+
+  add(url) {
+    if (this.#seen.has(url)) return this.templateOf(url);
+    this.#seen.add(url);
+    this.#urls.push(url);
+    return this.#walk(url, true);
+  }
+
+  templateOf(url) {
+    return this.#walk(url, false);
+  }
+
+  groups() {
+    const groups = new Map();
+    for (const url of this.#urls) {
+      const template = this.templateOf(url);
+      if (!groups.has(template)) groups.set(template, []);
+      groups.get(template).push(url);
+    }
+    return groups;
+  }
+}

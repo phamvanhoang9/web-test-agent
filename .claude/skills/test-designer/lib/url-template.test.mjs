@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { isFileUrl, isUnsafe, normalizeUrl } from './url-template.mjs';
+import { isFileUrl, isUnsafe, normalizeUrl, TemplateIndex } from './url-template.mjs';
 
 const BASE = 'https://app.test/orders/';
 
@@ -70,4 +70,60 @@ test('isFileUrl recognises file extensions but not sitemap.xml or dotted folders
   assert.equal(isFileUrl('https://app.test/sitemap.xml'), false);
   assert.equal(isFileUrl('https://app.test/orders/42'), false);
   assert.equal(isFileUrl('https://app.test/v1.2/docs'), false);
+});
+
+const at = (pathname) => `https://app.test${pathname}`;
+
+test('numbers, UUIDs, long hex and dates become :id', () => {
+  const index = new TemplateIndex();
+  assert.equal(index.add(at('/orders/42')), '/orders/:id');
+  assert.equal(
+    index.add(at('/users/3f2c1a9e-8b7d-4c6e-9f10-1a2b3c4d5e6f/settings')),
+    '/users/:id/settings',
+  );
+  assert.equal(index.add(at('/commits/9fceb02d0ae598e9')), '/commits/:id');
+  assert.equal(index.add(at('/reports/2026-09-27')), '/reports/:id');
+});
+
+test('file extensions survive templating', () => {
+  const index = new TemplateIndex();
+  assert.equal(index.add(at('/invoices/1042.pdf')), '/invoices/:id.pdf');
+});
+
+test('root and trailing slashes', () => {
+  const index = new TemplateIndex();
+  assert.equal(index.add(at('/')), '/');
+  assert.equal(index.add(at('/orders/')), '/orders');
+});
+
+test('the query does not split a template, but every URL is kept once', () => {
+  const index = new TemplateIndex();
+  index.add(at('/files/get?id=3'));
+  index.add(at('/files/get?id=4'));
+  index.add(at('/files/get?id=3'));
+  assert.deepEqual(index.groups().get('/files/get'), [at('/files/get?id=3'), at('/files/get?id=4')]);
+});
+
+test('siblings beyond the threshold collapse to :slug and earlier URLs regroup', () => {
+  const index = new TemplateIndex({ slugThreshold: 3 });
+  const urls = ['a', 'b', 'c', 'd'].map((slug) => at(`/products/widget-${slug}`));
+  urls.slice(0, 3).forEach((url) => index.add(url));
+  assert.equal(index.templateOf(urls[0]), '/products/widget-a');
+
+  index.add(urls[3]);
+
+  assert.equal(index.templateOf(urls[0]), '/products/:slug');
+  assert.deepEqual(index.groups().get('/products/:slug'), urls);
+});
+
+test('ids do not count towards the slug threshold', () => {
+  const index = new TemplateIndex({ slugThreshold: 3 });
+  for (let id = 1; id <= 10; id += 1) index.add(at(`/orders/${id}`));
+  assert.equal(index.add(at('/orders/new')), '/orders/new');
+});
+
+test('top-level sections never collapse, however many there are (Review Focus)', () => {
+  const index = new TemplateIndex({ slugThreshold: 3 });
+  for (const section of ['about', 'pricing', 'careers', 'blog', 'docs']) index.add(at(`/${section}`));
+  assert.equal(index.templateOf(at('/pricing')), '/pricing');
 });
