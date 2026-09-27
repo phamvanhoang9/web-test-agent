@@ -73,10 +73,15 @@ Edit...) and **cancel** it — never submit — to learn its fields and validati
 throwaway Playwright script in your scratchpad, or chrome-devtools MCP, both work.
 
 ## Write the plan
-Copy the template and fill it from the exploration:
+**If `artifacts/<host>/test-plan.md` already exists, update it — never copy the template over
+it.** It is a plan the user approved: keep every row and its TC id, add new cases with new ids
+after the highest one, and move a feature that disappeared into "không test (và lý do)" rather
+than deleting its row. Then rerun `coverage.mjs` and send the changed rows back for review.
+
+Only for a host with no plan yet, copy the template and fill it from the exploration:
 ```bash
 mkdir -p artifacts/<host>
-cp .claude/skills/test-designer/templates/test-cases.template.md artifacts/<host>/test-plan.md
+cp -n .claude/skills/test-designer/templates/test-cases.template.md artifacts/<host>/test-plan.md
 ```
 - Score risks (probability × impact → P0–P3). Background: `resources/knowledge/risk-scoring.md`.
 - Fill the **`## Test cases` table**: `TC | P | Tool | Mô tả | Các bước | Kỳ vọng | Status`.

@@ -114,7 +114,11 @@ in the denominator. `WAIVED` is a human override only.
   It still captures what loaded and logs the nav error — switch such sites to chrome-devtools MCP.
 - An empty button label in the exploration outline means an icon-only button; target its
   `aria-label`.
-- `report.mjs` works from `mcp-results.json` alone when a plan has no `PW` rows.
+- `report.mjs` works from `mcp-results.json` alone when a plan has no `PW` rows. With both, an
+  `mcp-results.json` older than the Playwright run counts as skipped — run MCP cases after
+  Playwright. It also rewrites the plan's Status column and archives an old `heal-proposal.md`.
+- Re-running on an existing `artifacts/<host>/` never starts over: `test-plan.md` and
+  `tests/*.spec.mjs` are updated in place, never replaced by their templates.
 - chrome-devtools MCP is configured in `.mcp.json` (the leading dot matters — Claude Code only
   reads project-scoped servers from `.mcp.json`, and a server only loads at session start);
   if it isn't connected, drive the `MCP` cases with a scratch Playwright script (fake media

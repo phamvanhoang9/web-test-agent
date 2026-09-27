@@ -18,10 +18,12 @@ the exploration, then write idiomatic tests) — there is no rigid parser to sat
 ## How
 1. Read `artifacts/<host>/test-plan.md` and `artifacts/<host>/exploration.md` (real
    selectors/elements observed on the site).
-2. Copy the template as a starting point:
+2. **Existing specs are edited, never replaced** — they carry fixes the healer made and the
+   user approved. Add a `test()` for each new `Tool=PW` row to the spec for its area. Only for
+   an area with no spec yet, start from the template:
    ```bash
    mkdir -p artifacts/<host>/tests
-   cp .claude/skills/script-generator/templates/example.spec.mjs artifacts/<host>/tests/<area>.spec.mjs
+   cp -n .claude/skills/script-generator/templates/example.spec.mjs artifacts/<host>/tests/<area>.spec.mjs
    ```
 3. One `test()` per `Tool=PW` row. **Encode the TC id + priority in the title** so the
    gate scores it: `test('TC-001 [P0] <Mô tả>', async ({ page }) => { ... })`.

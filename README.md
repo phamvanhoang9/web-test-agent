@@ -221,7 +221,7 @@ One domain, one self-contained bundle. The host comes from `BASE_URL`, sanitized
 
 ```
 artifacts/example.com/
-├── test-plan.md         # committed — the contract you approved
+├── test-plan.md         # the contract you approved; the gate fills in its Status column
 ├── tests/               # committed — the generated specs
 │   └── login.spec.mjs
 ├── exploration.md       # regenerated — what the explorer found
@@ -237,6 +237,7 @@ artifacts/example.com/
 ├── results.json         # regenerated — Playwright output
 ├── mcp-results.json     # regenerated — live-driven case verdicts
 ├── quality-gate.md      # regenerated — the decision
+├── heal-proposal.md     # the healer's plain-language proposal; archived with a date on the next run
 └── html-report/         # regenerated
 ```
 

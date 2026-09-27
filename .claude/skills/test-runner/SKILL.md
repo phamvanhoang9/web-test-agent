@@ -68,7 +68,13 @@ BASE_URL=https://brse.ai node .claude/skills/test-runner/report.mjs
 # (shortcut: BASE_URL=https://brse.ai npm run gate)
 ```
 `report.mjs` merges `results.json` + `mcp-results.json` → writes
-`artifacts/<host>/quality-gate.md` and prints a summary. **Relay that summary to the
+`artifacts/<host>/quality-gate.md` and prints a summary. It also rewrites the **Status** column
+of `test-plan.md` from this run (✅ / ❌ / ⏭️, ⬜ for a case this run did not include), and
+renames a `heal-proposal.md` older than this run to `heal-proposal.<date>-<time>.md`.
+
+**Run the MCP cases after Playwright.** `report.mjs` treats `mcp-results.json` written before
+the Playwright run started as left over from an earlier run: those cases count as skipped
+(not verified) and the gate says so. Rewrite the whole file on every run. **Relay that summary to the
 user** — don't just leave the file. Always tell them:
 - decision **PASS / CONCERNS / BLOCKED / FAIL** + the rationale
 - **counts**: total, passed, failed, skipped — and per-priority pass rate (P0/P1/P2/P3)
