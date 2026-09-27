@@ -28,7 +28,7 @@ export default defineConfig({
   use: {
     baseURL: base, // set per run
     screenshot: 'only-on-failure',
-    trace: 'on-first-retry',
+    trace: 'retain-on-failure', // retries is 0, so 'on-first-retry' would never record
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },

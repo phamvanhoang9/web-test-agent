@@ -16,6 +16,12 @@ For each failure, find the *real* cause by looking at the actual page, then deci
 - **Flaky / wrong script** (stale selector, race, bad assumption) → propose a minimal
   spec fix.
 
+## Start from the trace
+Every failing PW test keeps a trace at `artifacts/<host>/test-results/<test>/trace.zip`
+(`npx playwright show-trace <path>`): DOM snapshots before/after each action, how each
+locator resolved, and network/console on one timeline. It records *the run that failed*,
+so read it first — timing- or data-dependent failures may not reproduce on the live page.
+
 ## Diagnose on the live page (chrome-devtools MCP)
 The Playwright error alone is often not enough — inspect reality:
 - `mcp__chrome-devtools__navigate_page` to the failing URL (set up auth via steps if needed)
@@ -43,5 +49,5 @@ Present, per failing case:
 
 ## Gotcha
 - chrome-devtools MCP must be connected. If absent, diagnose from the Playwright error +
-  trace (`npx playwright show-report artifacts/<host>/html-report`) and say the live-page
+  trace (`npx playwright show-trace <trace.zip>`) and say the live-page
   inspection was skipped.
