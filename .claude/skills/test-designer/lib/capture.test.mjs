@@ -107,6 +107,12 @@ describe('probeFile', () => {
     assert.equal(ended.completed, false, 'the 5 MB body was never read to the end');
   });
 
+  test('a server that never answers is given up on after timeoutMs', { timeout: 10_000 }, async () => {
+    const started = Date.now();
+    await assert.rejects(probeFile(context, `${fixture.url}/never-ends`, { timeoutMs: 1000 }), /timeout|abort/i);
+    assert.ok(Date.now() - started < 5000);
+  });
+
   test('a missing file reports its 404', async () => {
     const result = await probeFile(context, `${fixture.url}/docs/missing.pdf`);
     assert.equal(result.status, 404);

@@ -142,6 +142,32 @@ describe('crawl failures and limits', () => {
     assert.ok(!map.templates.some((t) => t.visits.length && t.visits.every((v) => v.loginRedirect)));
   });
 
+  test('a page whose screenshot times out still yields its links', { timeout: 180_000 }, async (t) => {
+    const fixture = await startFixture({ slowFontHome: true });
+    t.after(() => fixture.close());
+
+    const run = await runCrawl(fixture, [], { WEBTEST_ROLES: 'admin', ...CREDENTIALS });
+    const map = run.siteMap();
+
+    assert.equal(run.code, 0, run.stderr);
+    assert.ok(map.templates.some((row) => row.template === '/products'), '/products is linked only from /');
+    assert.ok(map.health.some((h) => h.template === '/' && h.type === 'screenshot-error'));
+  });
+
+  test('forbidden pages that redirect to login are access findings, not an expired session', async (t) => {
+    const fixture = await startFixture({ denyByRedirect: true });
+    t.after(() => fixture.close());
+
+    const run = await runCrawl(fixture);
+    const map = run.siteMap();
+
+    assert.equal(run.code, 0, run.stderr);
+    assert.equal(fixture.logins.user, 1, 'no re-login was attempted');
+    assert.deepEqual(map.limitWarnings, []);
+    assert.equal(map.access['/admin'].user, 'login-redirect');
+    assert.ok(!map.templates.some((row) => row.template === '/login'), 'the login page is never crawled');
+  });
+
   test('persistent 429 stops the role with a warning', async (t) => {
     const fixture = await startFixture({ tooManyRequests: '/orders' });
     t.after(() => fixture.close());

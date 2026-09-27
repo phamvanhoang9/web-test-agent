@@ -47,7 +47,8 @@ follows same-origin links and `sitemap.xml`, groups URLs into route templates
 - **Skipped URLs** under Warnings were never opened because they look state-changing (logout,
   delete, export...). If one is safe and matters, rerun with `--allow <regex>`.
 
-It only follows links — never clicks or submits — so it is safe on production. Limits:
+It only follows links and never clicks or submits, which makes it fit for production — with
+the redirect caveat under Gotchas. Limits:
 `--max-pages` 200 per role, `--max-depth` 5, `--max-minutes` 15, `--delay-ms` 250,
 `--samples` 3 per template.
 
@@ -82,7 +83,8 @@ review/edit the table (human gate) before script-generator runs.
 - Note staging vs production in the plan; data-mutating cases belong on staging.
 - `crawl.mjs` login fails with `field-not-found`: the form is not at `/login` — set
   `WEBTEST_LOGIN_PATH`. SSO and MFA are not supported; use chrome-devtools MCP for those.
-- The crawler aborts requests a page itself makes to a state-changing URL, but a server-side
-  redirect to one is not guaranteed to be caught. Keep `--exclude` for known dangerous paths.
+- The crawler aborts requests a page itself makes to a state-changing URL, but it cannot
+  intercept a server-side redirect to one — whether the redirect answers a link, an image or
+  a fetch. Keep `--exclude` for known dangerous paths.
 - `artifacts/<host>/.auth/*.json` holds live session tokens. It is gitignored with the rest of
   `artifacts/`; never copy it elsewhere.

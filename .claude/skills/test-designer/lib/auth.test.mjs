@@ -60,6 +60,16 @@ describe('login', () => {
     assert.equal(fixture.logins.user, 1);
   });
 
+  test('an SSO button placed before the form is never pressed', async (t) => {
+    withEnv(t, { TEST_ADMIN_EMAIL: USERS.admin.email, TEST_ADMIN_PASSWORD: USERS.admin.password });
+    const before = fixture.logins.admin;
+
+    await login(browser, { baseUrl: fixture.url, role: 'admin', stateDir: stateDir(), loginPath: '/login-sso' });
+
+    assert.equal(fixture.logins.admin, before + 1, 'the form was submitted');
+    assert.equal(fixture.called('/oauth/google'), false);
+  });
+
   test('a wrong password fails at still-on-login and never echoes the password', async (t) => {
     withEnv(t, { TEST_ADMIN_EMAIL: USERS.admin.email, TEST_ADMIN_PASSWORD: 'wrong-fixture-pass' });
 

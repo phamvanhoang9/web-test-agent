@@ -36,16 +36,22 @@ export function normalizeUrl(href, base) {
   return url.href;
 }
 
+// A token is unsafe when it is a listed word, or starts with one followed by '-', '_' or an
+// uppercase letter (delete-account, remove_member, logoutAll). '_' counts as '-'
+// (sign_out), and a ';jsessionid=...' path parameter is ignored.
 function looksUnsafe(token) {
-  const [stem] = splitExtension(token.toLowerCase());
+  const [raw] = splitExtension(token.split(';')[0]);
+  const stem = raw.toLowerCase().replaceAll('_', '-');
   return UNSAFE_WORDS.some(
-    (word) => stem === word || stem.startsWith(`${word}-`) || stem.startsWith(`${word}_`),
+    (word) => stem === word
+      || stem.startsWith(`${word}-`)
+      || (stem.startsWith(word) && /[A-Z]/.test(raw.charAt(word.length))),
   );
 }
 
 /**
- * True when opening `url` could change state: a path segment, query key or query value is
- * (or starts with, before '-' / '_') a word such as logout or delete. `exclude` patterns
+ * True when opening `url` could change state: a path segment, query key or query value looks
+ * like a word such as logout or delete (see looksUnsafe). `exclude` patterns
  * always block; `allow` patterns reopen URLs the default word list would block.
  */
 export function isUnsafe(url, { exclude = [], allow = [] } = {}) {

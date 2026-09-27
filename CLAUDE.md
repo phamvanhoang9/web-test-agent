@@ -126,8 +126,9 @@ in the denominator. `WAIVED` is a human override only.
   `.claude/skills/test-runner/resources/knowledge/media-capture-cases.md`.
 - An MCP case that writes real data on staging must be cleaned up by the agent right after the
   verdict is recorded — nothing enforces it the way a Playwright fixture would.
-- `crawl.mjs` is read-only by construction: it follows links only, skips URLs whose path or
-  query contains logout/delete/export-style words, and aborts such requests made by pages
-  themselves. `artifacts/<host>/.auth/<role>.json` holds live session tokens.
+- `crawl.mjs` is read-only by design: it follows links only, skips URLs whose path or query
+  contains logout/delete/export-style words, and aborts such requests made by pages
+  themselves. It cannot intercept a server-side redirect to such a URL, so keep `--exclude`
+  for known dangerous paths. `artifacts/<host>/.auth/<role>.json` holds live session tokens.
 - `.env.<host>` then `.env` are loaded by `crawl.mjs` and `playwright.config.mjs` (shell wins);
   `explore.mjs` reads no credentials.

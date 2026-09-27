@@ -18,7 +18,8 @@ export const PRODUCT_SLUGS = Array.from(
 
 const CHUNK = Buffer.alloc(64 * 1024, 37);
 const PUBLIC_PATHS = new Set([
-  '/login', '/login2', '/public', '/long-poll', '/never-ends', '/no-form', '/go-export',
+  '/login', '/login2', '/login-sso', '/oauth/google', '/public', '/long-poll', '/never-ends', '/no-form',
+  '/go-export',
 ]);
 
 const html = (title, body) =>
@@ -28,6 +29,14 @@ const loginForm = (error = '') => html('Sign in', `<main>${error}<form method="p
 <label>Email <input name="email" type="email"></label>
 <label>Password <input name="password" type="password"></label>
 <button type="button" aria-label="Show password">eye</button>
+<button type="submit">Sign in</button></form></main>`);
+
+// An SSO button that sits before the form and also matches "sign in" must never be pressed.
+const loginWithSso = html('Sign in', `<main>
+<button type="button" onclick="location.href='/oauth/google'">Sign in with Google</button>
+<form method="post" action="/login">
+<label>Email <input name="email" type="email"></label>
+<label>Password <input name="password" type="password"></label>
 <button type="submit">Sign in</button></form></main>`);
 
 const loginStepOne = html('Sign in', `<main><form method="post" action="/login2">
@@ -49,9 +58,16 @@ const PUBLIC_PAGE = html('Fixture public', `<header><nav>
 <div hidden><a href="/hidden-menu">Hidden menu</a></div>
 </main><script>console.error('fixture-error')</script>`);
 
-function home(role) {
+// slowFontHome: a web font that never loads, so screenshots of / time out.
+// denyByRedirect: non-admins get hidden admin links, and forbidden pages redirect to login.
+function home(role, { slowFontHome, denyByRedirect }) {
   const adminLinks = role === 'admin' ? '<a href="/admin">Admin</a> <a href="/invoices">Invoices</a>' : '';
-  return html('Home', `<header><nav>
+  const deniedLinks = denyByRedirect && role !== 'admin'
+    ? `<div hidden><a href="/admin">Admin</a> <a href="/admin/users">Users</a> <a href="/admin/billing">Billing</a>
+<a href="/admin/audit">Audit</a></div> <a href="/login?next=/orders">Switch account</a>`
+    : '';
+  const font = slowFontHome ? '<style>@font-face{font-family:slow;src:url(/never-ends)} body{font-family:slow}</style>' : '';
+  return html('Home', `${font}${deniedLinks}<header><nav>
 <a href="/orders">Orders</a> <a href="/products">Products</a> <a href="/broken">Broken</a> ${adminLinks}
 <a href="/docs/manual.pdf">Manual</a> <a href="/files/get?id=3">Export file</a>
 <a href="/legacy/report.pdf">Legacy report</a> <a href="/docs/missing.pdf">Missing</a>
@@ -72,6 +88,8 @@ export async function startFixture({
   loginPath = '/login',
   expireSessionsAfter = Infinity,
   tooManyRequests = null,
+  slowFontHome = false,
+  denyByRedirect = false,
 } = {}) {
   const requests = [];
   const logins = { admin: 0, user: 0 };
@@ -159,7 +177,9 @@ export async function startFixture({
 
     if (pathname === '/login') return send(200, loginForm());
     if (pathname === '/login2') return send(200, loginStepOne);
-    if (pathname === '/') return send(200, home(role));
+    if (pathname === '/login-sso') return send(200, loginWithSso);
+    if (pathname === '/oauth/google') return send(200, html('Google', '<main><p>Choose an account</p></main>'));
+    if (pathname === '/') return send(200, home(role, { slowFontHome, denyByRedirect }));
     if (pathname === '/public') return send(200, PUBLIC_PAGE);
     if (pathname === '/no-form') return send(200, html('No form', '<main><p>Nothing to fill</p></main>'));
     if (pathname === '/long-poll') {
@@ -193,9 +213,13 @@ export async function startFixture({
     if (pathname === '/hidden-menu' || pathname === '/sitemap-only') {
       return send(200, html(pathname.slice(1), `<main><p>${pathname}</p></main>`));
     }
-    if (pathname === '/admin' || pathname === '/invoices') {
-      if (requireAuth && role !== 'admin') return send(403, html('Forbidden', '<main><p>Forbidden</p></main>'));
-      const body = pathname === '/admin'
+    if (pathname === '/admin' || pathname.startsWith('/admin/') || pathname === '/invoices') {
+      if (requireAuth && role !== 'admin') {
+        if (!denyByRedirect) return send(403, html('Forbidden', '<main><p>Forbidden</p></main>'));
+        res.writeHead(302, { location: loginPath });
+        return res.end();
+      }
+      const body = pathname.startsWith('/admin')
         ? '<p>Admin</p>'
         : Array.from({ length: 5 }, (_, i) => `<a href="/invoices/${i + 1}.pdf">Invoice ${i + 1}</a>`).join(' ');
       return send(200, html(pathname.slice(1), `<main>${body}</main>`));

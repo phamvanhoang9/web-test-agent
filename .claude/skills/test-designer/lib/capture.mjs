@@ -170,18 +170,20 @@ const MAX_REDIRECTS = 5;
  * body is cancelled as soon as headers arrive, so a server that ignores Range and starts
  * sending the whole file is cut off. Cookies come from `context`, so the probe runs as the
  * logged-in role. Redirects are followed by hand: one to `loginPath` is reported, one that
- * `canFollow` rejects is not taken.
+ * `canFollow` rejects is not taken. A request with no response headers after `timeoutMs`
+ * rejects with a TimeoutError.
  */
-export async function probeFile(context, url, { loginPath = '/login', canFollow = () => true } = {}) {
+export async function probeFile(context, url, { loginPath = '/login', canFollow = () => true, timeoutMs = 30_000 } = {}) {
   let current = url;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
     const cookie = (await context.cookies(current)).map((c) => `${c.name}=${c.value}`).join('; ');
     const headers = cookie ? { cookie } : {};
     let method = 'head';
-    let response = await fetch(current, { method: 'HEAD', headers, redirect: 'manual' });
+    const request = { redirect: 'manual', signal: AbortSignal.timeout(timeoutMs) };
+    let response = await fetch(current, { ...request, method: 'HEAD', headers });
     if (response.status === 405 || response.status === 501) {
       method = 'range';
-      response = await fetch(current, { headers: { ...headers, range: 'bytes=0-0' }, redirect: 'manual' });
+      response = await fetch(current, { ...request, headers: { ...headers, range: 'bytes=0-0' } });
     }
     await response.body?.cancel();
     const location = response.headers.get('location');

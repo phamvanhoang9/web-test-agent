@@ -4,8 +4,9 @@
 // Logs each role in, walks same-origin links breadth-first (plus sitemap.xml), groups URLs
 // into route templates, captures one representative page per template, probes files
 // without downloading them, then checks which role can open which template.
-// Read-only by construction: it follows links, never clicks or submits, skips URLs that look
-// state-changing, and aborts any request a page itself makes to one.
+// Read-only by design: it follows links, never clicks or submits, skips URLs that look
+// state-changing, and aborts any request a page itself makes to one. A server-side redirect
+// to such a URL (from a link, an image or a fetch) is not intercepted.
 //
 // Usage:  node .claude/skills/test-designer/crawl.mjs <url> [--roles admin,user]
 //           [--max-pages 200] [--max-depth 5] [--concurrency 3] [--delay-ms 250]
@@ -110,6 +111,7 @@ process.on('SIGINT', () => {
 });
 
 const UNGUARDED_TYPES = new Set(['script', 'stylesheet', 'font']);
+const SCREENSHOT_TIMEOUT_MS = 15_000;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const isBusy = (record) => record.status === 429 || record.status === 503;
 const failedVisit = (role, url, kind, probe, error) => ({
@@ -132,6 +134,7 @@ function intake(href, from) {
     }
     return null;
   }
+  if (new URL(url).pathname === config.loginPath) return null; // visiting it proves nothing
   if (isUnsafe(url, filters)) {
     state.unsafeSkipped.add(url);
     return null;
@@ -209,7 +212,11 @@ async function visitPage(role, context, url, { probe = false } = {}) {
       fullCaptures.add(template);
       const dir = pageDir(url);
       mkdirSync(path.join(crawlDir, 'pages', dir), { recursive: true });
-      await page.screenshot({ path: path.join(crawlDir, 'pages', dir, 'screenshot.png'), fullPage: true });
+      // A failed screenshot (web fonts that never load, a huge page) must not cost the visit
+      // its links: keep the report, note the error, move on.
+      await page
+        .screenshot({ path: path.join(crawlDir, 'pages', dir, 'screenshot.png'), fullPage: true, timeout: SCREENSHOT_TIMEOUT_MS })
+        .catch((error) => record.errors.push({ type: 'screenshot-error', text: String(error) }));
       writeFileSync(path.join(crawlDir, 'pages', dir, 'exploration.md'), renderExploration(result, host));
       record.evidence = `pages/${dir}/exploration.md`;
     }
@@ -279,23 +286,34 @@ async function crawlRole(browser, role, statePaths) {
     for (const { item, record } of expired.splice(0)) forget(item, record);
   }
 
-  // Three login redirects in a row mean the session died, not that three pages are
-  // forbidden: log in again once, revisit those pages, and give up if it happens again.
+  // Three login redirects in a row mean either a dead session or pages this role may not
+  // open (many frameworks answer "forbidden" with a redirect to login). If the start page
+  // still loads, it is the latter: keep those records as access findings. Otherwise log in
+  // again once and revisit the pages; give up if the session dies a second time.
+  async function renewSession() {
+    const check = await context.request
+      .get(startUrl, { maxRedirects: 0, failOnStatusCode: false, timeout: 15_000 })
+      .catch(() => null);
+    if (check?.ok()) {
+      expired.length = 0;
+      return;
+    }
+    if (relogged) {
+      roleStop = `session for role ${role} keeps expiring — stopped, coverage incomplete`;
+      return;
+    }
+    await relogin().catch((error) => {
+      roleStop = `re-login for role ${role} failed (${error instanceof LoginError ? error.step : error.message}) — coverage incomplete`;
+    });
+  }
+
   async function onLoginRedirect(item, record, startedEpoch) {
     if (startedEpoch < sessionEpoch) return forget(item, record);
     expired.push({ item, record });
     if (expired.length < 3 || reloginRunning) return undefined;
-    if (relogged) {
-      roleStop = `session for role ${role} keeps expiring — stopped, coverage incomplete`;
-      return undefined;
-    }
-    reloginRunning = relogin()
-      .catch((error) => {
-        roleStop = `re-login for role ${role} failed (${error instanceof LoginError ? error.step : error.message}) — coverage incomplete`;
-      })
-      .finally(() => {
-        reloginRunning = null;
-      });
+    reloginRunning = renewSession().finally(() => {
+      reloginRunning = null;
+    });
     return reloginRunning;
   }
 

@@ -299,7 +299,7 @@ The parts of this workflow that exist to keep it honest:
 
 ## Requirements
 
-Node 20.12 or later, and Chromium via `npx playwright install chromium`. The `chrome-devtools`
+Node 20.12 or later (21 or later for `npm run test:unit`), and Chromium via `npx playwright install chromium`. The `chrome-devtools`
 MCP server is optional, and required only for `Tool=MCP` cases and live-page healing.
 
 For working conventions and the internal contracts between phases, see [CLAUDE.md](CLAUDE.md).

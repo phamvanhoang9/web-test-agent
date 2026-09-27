@@ -45,8 +45,14 @@ test('isUnsafe blocks state-changing path segments', () => {
   }
 });
 
+test('isUnsafe blocks underscore, path-parameter and camelCase logout forms', () => {
+  for (const pathname of ['/users/sign_out', '/log_out', '/logout;jsessionid=abc', '/api/logoutAll', '/deleteItem/4']) {
+    assert.equal(isUnsafe(`https://app.test${pathname}`), true, pathname);
+  }
+});
+
 test('isUnsafe allows look-alike words', () => {
-  for (const pathname of ['/', '/orders/42', '/deleted-items', '/tools/bg-remover', '/exports']) {
+  for (const pathname of ['/', '/orders/42', '/deleted-items', '/deletedItems', '/tools/bg-remover', '/exports']) {
     assert.equal(isUnsafe(`https://app.test${pathname}`), false, pathname);
   }
 });
