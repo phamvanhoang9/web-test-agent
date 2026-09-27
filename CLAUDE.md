@@ -120,7 +120,9 @@ in the denominator. `WAIVED` is a human override only.
 - Re-running on an existing `artifacts/<host>/` never starts over: `test-plan.md` and
   `tests/*.spec.mjs` are updated in place, never replaced by their templates.
 - chrome-devtools MCP is configured in `.mcp.json` (the leading dot matters — Claude Code only
-  reads project-scoped servers from `.mcp.json`, and a server only loads at session start);
+  reads project-scoped servers from `.mcp.json`, and a server only loads at session start). A
+  new machine shows it as "Pending approval" until it is approved once, or pre-approved with
+  `enabledMcpjsonServers` + an `mcp__chrome-devtools` allow rule in `.claude/settings.local.json`;
   if it isn't connected, drive the `MCP` cases with a scratch Playwright script (fake media
   flags for microphone/screen cases) rather than skipping them; `Tool=MCP` cases never wait for
   a confirmation. It also passes

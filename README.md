@@ -304,6 +304,14 @@ The parts of this workflow that exist to keep it honest:
 ## Requirements
 
 Node 20.12 or later (21 or later for `npm run test:unit`), and Chromium via `npx playwright install chromium`. The `chrome-devtools`
-MCP server is optional, and required only for `Tool=MCP` cases and live-page healing.
+MCP server is optional, and required only for `Tool=MCP` cases and live-page healing. Claude
+Code asks once before it starts a project's MCP server; to pre-approve it and its tools, add to
+`.claude/settings.local.json` (machine-local, not committed):
+
+```json
+{ "enabledMcpjsonServers": ["chrome-devtools"], "permissions": { "allow": ["mcp__chrome-devtools"] } }
+```
+
+`claude mcp list` should then show `chrome-devtools ... ✔ Connected`.
 
 For working conventions and the internal contracts between phases, see [CLAUDE.md](CLAUDE.md).
