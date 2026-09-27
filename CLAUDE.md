@@ -123,4 +123,3 @@ in the denominator. `WAIVED` is a human override only.
   `.claude/skills/test-runner/resources/knowledge/media-capture-cases.md`.
 - An MCP case that writes real data on staging must be cleaned up by the agent right after the
   verdict is recorded — nothing enforces it the way a Playwright fixture would.
-- This directory is not a git repository.
