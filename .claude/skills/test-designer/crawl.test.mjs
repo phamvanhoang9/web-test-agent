@@ -1,7 +1,7 @@
 import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,8 +28,12 @@ function paths(fixture, cwd) {
   return { crawlDir, siteMap: () => JSON.parse(readFileSync(path.join(crawlDir, 'site-map.json'), 'utf8')) };
 }
 
-function runCrawl(fixture, args = [], env = { WEBTEST_ROLES: 'admin,user', ...CREDENTIALS }) {
-  const cwd = mkdtempSync(path.join(tmpdir(), 'webtest-crawl-'));
+function runCrawl(
+  fixture,
+  args = [],
+  env = { WEBTEST_ROLES: 'admin,user', ...CREDENTIALS },
+  cwd = mkdtempSync(path.join(tmpdir(), 'webtest-crawl-')),
+) {
   return new Promise((resolve) => {
     execFile(process.execPath, [CRAWL, fixture.url, '--delay-ms', '0', ...args], { cwd, env: cleanEnv(env) },
       (error, stdout, stderr) => resolve({ code: error ? error.code : 0, stdout, stderr, ...paths(fixture, cwd) }));
@@ -188,6 +192,22 @@ describe('crawl failures and limits', () => {
     assert.deepEqual(map.limitWarnings, []);
     assert.equal(map.access['/admin'].user, 'login-redirect');
     assert.ok(!map.templates.some((row) => row.template === '/login'), 'the login page is never crawled');
+  });
+
+  test('each crawl starts from an empty pages folder', async (t) => {
+    const fixture = await startFixture();
+    t.after(() => fixture.close());
+    const cwd = mkdtempSync(path.join(tmpdir(), 'webtest-crawl-'));
+    const stale = path.join(paths(fixture, cwd).crawlDir, 'pages', 'admin-00000000');
+    mkdirSync(stale, { recursive: true });
+    writeFileSync(path.join(stale, 'exploration.md'), 'evidence from an earlier crawl');
+
+    const run = await runCrawl(fixture, [], { WEBTEST_ROLES: 'admin', ...CREDENTIALS }, cwd);
+
+    assert.equal(run.code, 0, run.stderr);
+    assert.equal(existsSync(stale), false);
+    const evidence = run.siteMap().templates.find((row) => row.template === '/orders').evidence;
+    assert.ok(existsSync(path.join(run.crawlDir, evidence)));
   });
 
   test('--no-bundle-routes turns route discovery off', async (t) => {

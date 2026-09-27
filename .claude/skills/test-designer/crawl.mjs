@@ -18,12 +18,12 @@
 //
 // Output: artifacts/<host>/crawl/site-map.md    (what an agent reads)
 //         artifacts/<host>/crawl/site-map.json  (everything, untruncated)
-//         artifacts/<host>/crawl/pages/<url>/   (exploration.md + screenshot.png)
+//         artifacts/<host>/crawl/pages/<url>/   (exploration.md + screenshot.png; cleared per crawl)
 //         artifacts/<host>/.auth/<role>.json    (saved sessions — they contain tokens)
 
 import { chromium } from '@playwright/test';
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { login, LoginError, missingCredentials } from './lib/auth.mjs';
@@ -510,6 +510,9 @@ try {
 }
 
 let siteMap;
+// Evidence from an earlier crawl would sit beside this one's unlinked but easy to mistake for
+// current; clear it now that login worked (a failed login leaves the last crawl intact).
+rmSync(path.join(crawlDir, 'pages'), { recursive: true, force: true });
 try {
   if (config.bundleRoutes) state.bundle = await discoverRoutes(browser, statePaths[config.roles[0]]);
   for (const role of config.roles) {
