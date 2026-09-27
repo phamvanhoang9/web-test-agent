@@ -227,7 +227,7 @@ artifacts/example.com/
 ├── console.json         # regenerated — console errors and warnings
 ├── network.json         # regenerated — request log, failures flagged
 ├── crawl/               # regenerated — crawl.mjs output
-│   ├── site-map.md      #   templates, files, access matrix, health, warnings
+│   ├── site-map.md      #   templates, files, access matrix, bundle routes, health, warnings
 │   ├── site-map.json    #   the same, untruncated
 │   └── pages/<url>/     #   exploration.md + screenshot.png per template
 ├── .auth/<role>.json    # regenerated — saved login sessions (live tokens)

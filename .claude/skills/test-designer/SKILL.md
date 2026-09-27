@@ -35,7 +35,8 @@ node .claude/skills/test-designer/crawl.mjs https://app.example.com
 Logs in as each role in `WEBTEST_ROLES` (credentials `TEST_<ROLE>_EMAIL` /
 `TEST_<ROLE>_PASSWORD`, or `TEST_EMAIL` / `TEST_PASSWORD` for the default role — from the
 shell, `.env.<host>`, then `.env`; login page `WEBTEST_LOGIN_PATH`, default `/login`),
-follows same-origin links and `sitemap.xml`, groups URLs into route templates
+follows same-origin links, `sitemap.xml` and the routes declared in the SPA's JS bundle
+(React Router / Vue Router / Angular configs), groups URLs into route templates
 (`/orders/:id`), and writes `artifacts/<host>/crawl/site-map.md`. Read it before anything else:
 - **Warnings at the top** mean coverage is incomplete (page or time limit, rate limiting, a
   session that kept expiring). Say so in the plan.
@@ -44,6 +45,9 @@ follows same-origin links and `sitemap.xml`, groups URLs into route templates
 - **Access matrix** rows where roles differ are authorization cases (P0/P1). A `[file]` row
   that differs is a data-exposure risk (P0); also propose an ID-swap (IDOR) case — the crawler
   never tries other IDs.
+- **Routes from JS bundle** lists routes no link points to — pages the UI only reaches through
+  buttons. `opened` ones are crawled like links; `unsafe` and `no-id` (a `:param` no crawled
+  page could fill) ones are not — cover them with chrome-devtools MCP if they matter.
 - **Skipped URLs** under Warnings were never opened because they look state-changing (logout,
   delete, export...). If one is safe and matters, rerun with `--allow <regex>`.
 
@@ -86,5 +90,8 @@ review/edit the table (human gate) before script-generator runs.
 - The crawler aborts requests a page itself makes to a state-changing URL, but it cannot
   intercept a server-side redirect to one — whether the redirect answers a link, an image or
   a fetch. Keep `--exclude` for known dangerous paths.
+- Bundle route discovery reads only the start page's own `<script>` / `modulepreload` files
+  (up to 20). Next.js route manifests are not read, relative child routes are skipped, and a
+  JS-only app with no router config yields nothing. Turn it off with `--no-bundle-routes`.
 - `artifacts/<host>/.auth/*.json` holds live session tokens. It is gitignored with the rest of
   `artifacts/`; never copy it elsewhere.

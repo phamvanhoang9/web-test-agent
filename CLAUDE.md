@@ -128,7 +128,8 @@ in the denominator. `WAIVED` is a human override only.
   verdict is recorded — nothing enforces it the way a Playwright fixture would.
 - `crawl.mjs` is read-only by design: it follows links only, skips URLs whose path or query
   contains logout/delete/export-style words, and aborts such requests made by pages
-  themselves. It cannot intercept a server-side redirect to such a URL, so keep `--exclude`
+  themselves. Routes found in the SPA's JS bundle go through the same filter (plus `live` and
+  `callback`). It cannot intercept a server-side redirect to such a URL, so keep `--exclude`
   for known dangerous paths. `artifacts/<host>/.auth/<role>.json` holds live session tokens.
 - `.env.<host>` then `.env` are loaded by `crawl.mjs` and `playwright.config.mjs` (shell wins);
   `explore.mjs` reads no credentials.
