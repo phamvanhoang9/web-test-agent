@@ -1,0 +1,437 @@
+#!/usr/bin/env node
+// crawl.mjs — multi-page, multi-role exploration driver for the test-designer skill (phase 1).
+//
+// Logs each role in, walks same-origin links breadth-first (plus sitemap.xml), groups URLs
+// into route templates, captures one representative page per template, probes files
+// without downloading them, then checks which role can open which template.
+// Read-only by construction: it follows links, never clicks or submits, skips URLs that look
+// state-changing, and aborts any request a page itself makes to one.
+//
+// Usage:  node .claude/skills/test-designer/crawl.mjs <url> [--roles admin,user]
+//           [--max-pages 200] [--max-depth 5] [--concurrency 3] [--delay-ms 250]
+//           [--samples 3] [--slug-threshold 20] [--max-minutes 15]
+//           [--exclude <regex>]... [--allow <regex>]...
+// Roles default to WEBTEST_ROLES, else a single 'default' role (TEST_EMAIL/TEST_PASSWORD);
+// role X reads TEST_X_EMAIL/TEST_X_PASSWORD. Env comes from the shell, .env.<host>, .env.
+//
+// Output: artifacts/<host>/crawl/site-map.md    (what an agent reads)
+//         artifacts/<host>/crawl/site-map.json  (everything, untruncated)
+//         artifacts/<host>/crawl/pages/<url>/   (exploration.md + screenshot.png)
+//         artifacts/<host>/.auth/<role>.json    (saved sessions — they contain tokens)
+
+import { chromium } from '@playwright/test';
+import { createHash } from 'node:crypto';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { parseArgs } from 'node:util';
+import { login, LoginError, missingCredentials } from './lib/auth.mjs';
+import { bundleDir, hostOf, loadEnv } from './lib/bundle.mjs';
+import { capturePage, probeFile, renderExploration } from './lib/capture.mjs';
+import { buildSiteMap, renderSiteMap } from './lib/site-map.mjs';
+import { isFileUrl, isUnsafe, normalizeUrl, TemplateIndex } from './lib/url-template.mjs';
+
+const { values: args, positionals } = parseArgs({
+  allowPositionals: true,
+  options: {
+    roles: { type: 'string' },
+    'max-pages': { type: 'string', default: '200' },
+    'max-depth': { type: 'string', default: '5' },
+    concurrency: { type: 'string', default: '3' },
+    'delay-ms': { type: 'string', default: '250' },
+    samples: { type: 'string', default: '3' },
+    'slug-threshold': { type: 'string', default: '20' },
+    'max-minutes': { type: 'string', default: '15' },
+    exclude: { type: 'string', multiple: true, default: [] },
+    allow: { type: 'string', multiple: true, default: [] },
+  },
+});
+const startUrl = positionals[0];
+if (!startUrl) {
+  console.error('Usage: node crawl.mjs <url> [--roles admin,user] [--max-pages 200] [--max-minutes 15] ...');
+  process.exit(1);
+}
+
+const host = hostOf(startUrl);
+loadEnv(host);
+
+const limits = {
+  maxPages: Number(args['max-pages']),
+  maxDepth: Number(args['max-depth']),
+  concurrency: Number(args.concurrency),
+  delayMs: Number(args['delay-ms']),
+  samples: Number(args.samples),
+  slugThreshold: Number(args['slug-threshold']),
+  maxMinutes: Number(args['max-minutes']),
+};
+if (Object.values(limits).some((n) => !Number.isFinite(n) || n < 0) || limits.concurrency < 1) {
+  console.error(`Invalid numeric flag: ${JSON.stringify(limits)} (all must be >= 0, --concurrency >= 1)`);
+  process.exit(1);
+}
+const config = {
+  roles: (args.roles || process.env.WEBTEST_ROLES || 'default').split(',').map((r) => r.trim()).filter(Boolean),
+  ...limits,
+  loginPath: process.env.WEBTEST_LOGIN_PATH || '/login',
+  exclude: args.exclude,
+  allow: args.allow,
+};
+const filters = {
+  exclude: config.exclude.map((pattern) => new RegExp(pattern, 'i')),
+  allow: config.allow.map((pattern) => new RegExp(pattern, 'i')),
+};
+
+const missing = missingCredentials(config.roles);
+if (missing.length) {
+  console.error(`Missing credentials (set them in the shell, .env.${host} or .env): ${missing.join(', ')}`);
+  process.exit(1);
+}
+
+const origin = new URL(startUrl).origin;
+const outDir = bundleDir(startUrl);
+const crawlDir = path.join(outDir, 'crawl');
+const stateDir = path.join(outDir, '.auth');
+const index = new TemplateIndex({ slugThreshold: config.slugThreshold });
+const state = {
+  baseUrl: startUrl,
+  roles: config.roles,
+  config,
+  startedAt: new Date().toISOString(),
+  finishedAt: null,
+  pagesVisited: {},
+  limitWarnings: [],
+  unsafeSkipped: new Set(),
+  externalOrigins: new Set(),
+  visits: [],
+};
+const fullCaptures = new Set(); // templates that already have a screenshot + exploration.md
+const deadline = Date.now() + config.maxMinutes * 60_000;
+let stopReason = null;
+process.on('SIGINT', () => {
+  stopReason ??= 'interrupted (SIGINT)';
+});
+
+const UNGUARDED_TYPES = new Set(['script', 'stylesheet', 'font']);
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const isBusy = (record) => record.status === 429 || record.status === 503;
+const failedVisit = (role, url, kind, probe, error) => ({
+  role, url, kind, probe, status: null, loginRedirect: false, errors: [], failedRequests: [], navError: String(error),
+});
+
+/** True once the crawl must wind down (time limit or SIGINT). */
+function shouldStop() {
+  if (Date.now() > deadline) stopReason ??= `time limit (${config.maxMinutes} min) reached`;
+  return stopReason !== null;
+}
+
+/** Normalize a discovered link and register it; returns the URL to enqueue, or null. */
+function intake(href, from) {
+  const url = normalizeUrl(href, from);
+  if (url === null) {
+    if (URL.canParse(href, from)) {
+      const target = new URL(href, from);
+      if (/^https?:$/.test(target.protocol) && target.origin !== origin) state.externalOrigins.add(target.origin);
+    }
+    return null;
+  }
+  if (isUnsafe(url, filters)) {
+    state.unsafeSkipped.add(url);
+    return null;
+  }
+  index.add(url);
+  return url;
+}
+
+/** Folder name for one URL's evidence: readable path, cut to 80 chars, plus a short hash. */
+function pageDir(url) {
+  const { pathname, search } = new URL(url);
+  const name = `${pathname}${search}`.replace(/^\//, '').replaceAll('/', '__').replace(/[^a-z0-9.-]/gi, '_').slice(0, 80);
+  return `${name || '_root'}-${createHash('sha1').update(url).digest('hex').slice(0, 8)}`;
+}
+
+/** A browser context for `role` whose pages cannot request state-changing URLs themselves. */
+async function openContext(browser, statePath) {
+  const context = await browser.newContext({ baseURL: origin, storageState: statePath });
+  // A page may itself request a state-changing URL (<img src="/logout">, an auto-firing
+  // fetch). Abort those. Scripts, styles and fonts are left alone so that a file merely
+  // named reset.css still loads.
+  await context.route('**/*', (route) => {
+    const request = route.request();
+    const url = request.url();
+    if (UNGUARDED_TYPES.has(request.resourceType()) || !url.startsWith(origin) || !isUnsafe(url, filters)) {
+      return route.continue();
+    }
+    state.unsafeSkipped.add(url);
+    return route.abort('blockedbyclient');
+  });
+  return context;
+}
+
+async function visitFile(role, context, url, { probe = false } = {}) {
+  const result = await probeFile(context, url, {
+    loginPath: config.loginPath,
+    canFollow: (target) => normalizeUrl(target, origin) !== null && !isUnsafe(target, filters),
+  });
+  return {
+    record: {
+      role, url, kind: 'file', probe,
+      status: result.status,
+      loginRedirect: result.outcome === 'login-redirect',
+      contentType: result.contentType ?? '',
+      bytes: result.bytes ?? null,
+      method: result.method,
+      outcome: result.outcome,
+      errors: [],
+      failedRequests: [],
+    },
+    hrefs: [],
+  };
+}
+
+async function visitPage(role, context, url, { probe = false } = {}) {
+  const template = index.templateOf(url);
+  const page = await context.newPage();
+  try {
+    const result = await capturePage(page, url, { waitStrategy: 'settled' });
+    if (result.isFile) return visitFile(role, context, url, { probe });
+    const loginRedirect = new URL(result.finalUrl).pathname === config.loginPath;
+    const record = {
+      role, url, kind: 'page', probe,
+      status: result.status,
+      loginRedirect,
+      skeleton: result.skeleton,
+      errors: result.consoleMsgs.filter((m) => m.type !== 'warning'),
+      failedRequests: result.network
+        .filter((r) => r.failed)
+        .map(({ status, method, url: requestUrl }) => ({ status, method, url: requestUrl })),
+      evidence: null,
+    };
+    const capturable = !probe && !loginRedirect && result.status !== null && result.status < 400;
+    if (capturable && !fullCaptures.has(template)) {
+      fullCaptures.add(template);
+      const dir = pageDir(url);
+      mkdirSync(path.join(crawlDir, 'pages', dir), { recursive: true });
+      await page.screenshot({ path: path.join(crawlDir, 'pages', dir, 'screenshot.png'), fullPage: true });
+      writeFileSync(path.join(crawlDir, 'pages', dir, 'exploration.md'), renderExploration(result, host));
+      record.evidence = `pages/${dir}/exploration.md`;
+    }
+    return { record, hrefs: loginRedirect ? [] : result.hrefs };
+  } finally {
+    await page.close();
+  }
+}
+
+const visit = (role, context, url, options) => (isFileUrl(url) ? visitFile : visitPage)(role, context, url, options);
+
+/** URLs listed in /sitemap.xml, following a sitemap index one level down. */
+async function sitemapUrls(context) {
+  const read = async (url) => {
+    try {
+      const response = await context.request.get(url, { failOnStatusCode: false, maxRedirects: 0 });
+      if (!response.ok()) return { xml: '', urls: [] };
+      const xml = await response.text();
+      const urls = [...xml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/g)].map((m) => m[1].replaceAll('&amp;', '&'));
+      return { xml, urls };
+    } catch (error) {
+      console.warn(`sitemap ${url} could not be read: ${error.message}`);
+      return { xml: '', urls: [] };
+    }
+  };
+  const top = await read(`${origin}/sitemap.xml`);
+  if (!/<sitemapindex/i.test(top.xml)) return top.urls;
+  const nested = top.urls.filter((url) => normalizeUrl(url, origin) !== null && !isUnsafe(url, filters));
+  return (await Promise.all(nested.map(read))).flatMap((sitemap) => sitemap.urls);
+}
+
+/** Breadth-first crawl as one role, `config.concurrency` pages at a time. */
+async function crawlRole(browser, role, statePaths) {
+  console.log(`crawling as ${role}...`);
+  const context = await openContext(browser, statePaths[role]);
+  const queue = [];
+  const queued = new Set();
+  const samplesTaken = new Map();
+  const expired = [];
+  let visited = 0;
+  let active = 0;
+  let delayMs = config.delayMs;
+  let sessionEpoch = 0;
+  let relogged = false;
+  let reloginRunning = null;
+  let roleStop = null;
+
+  const enqueue = (url, depth) => {
+    if (url === null || depth > config.maxDepth || queued.has(url)) return;
+    queued.add(url);
+    queue.push({ url, depth });
+  };
+  // Undo a visit made with a dead session and queue the URL again.
+  const forget = (item, record) => {
+    state.visits.splice(state.visits.indexOf(record), 1);
+    samplesTaken.set(item.sampleKey, samplesTaken.get(item.sampleKey) - 1);
+    visited -= 1;
+    queue.push(item);
+  };
+
+  async function relogin() {
+    relogged = true;
+    const statePath = await login(browser, { baseUrl: origin, role, stateDir, loginPath: config.loginPath });
+    await context.clearCookies();
+    await context.addCookies(JSON.parse(readFileSync(statePath, 'utf8')).cookies);
+    sessionEpoch += 1;
+    for (const { item, record } of expired.splice(0)) forget(item, record);
+  }
+
+  // Three login redirects in a row mean the session died, not that three pages are
+  // forbidden: log in again once, revisit those pages, and give up if it happens again.
+  async function onLoginRedirect(item, record, startedEpoch) {
+    if (startedEpoch < sessionEpoch) return forget(item, record);
+    expired.push({ item, record });
+    if (expired.length < 3 || reloginRunning) return undefined;
+    if (relogged) {
+      roleStop = `session for role ${role} keeps expiring — stopped, coverage incomplete`;
+      return undefined;
+    }
+    reloginRunning = relogin()
+      .catch((error) => {
+        roleStop = `re-login for role ${role} failed (${error instanceof LoginError ? error.step : error.message}) — coverage incomplete`;
+      })
+      .finally(() => {
+        reloginRunning = null;
+      });
+    return reloginRunning;
+  }
+
+  async function handle(item) {
+    const startedEpoch = sessionEpoch;
+    let { record, hrefs } = await visit(role, context, item.url);
+    if (isBusy(record)) {
+      delayMs = Math.max(delayMs * 2, 500);
+      await sleep(delayMs);
+      ({ record, hrefs } = await visit(role, context, item.url));
+      if (isBusy(record)) {
+        roleStop = `rate limited (HTTP ${record.status}) at ${item.url} — stopped role ${role}, coverage incomplete`;
+        return;
+      }
+    }
+    state.visits.push(record);
+    if (record.loginRedirect) {
+      await onLoginRedirect(item, record, startedEpoch);
+      return;
+    }
+    if (!reloginRunning) expired.length = 0;
+    for (const href of hrefs) enqueue(intake(href, item.url), item.depth + 1);
+  }
+
+  async function worker() {
+    while (!shouldStop() && !roleStop) {
+      const item = queue.shift();
+      if (!item) {
+        if (active === 0) return;
+        await sleep(50);
+        continue;
+      }
+      const sampleKey = index.templateOf(item.url);
+      if ((samplesTaken.get(sampleKey) ?? 0) >= config.samples) continue;
+      if (visited >= config.maxPages) {
+        roleStop = `page limit (${config.maxPages}) reached for role ${role} — coverage incomplete`;
+        return;
+      }
+      samplesTaken.set(sampleKey, (samplesTaken.get(sampleKey) ?? 0) + 1);
+      item.sampleKey = sampleKey;
+      visited += 1;
+      active += 1;
+      try {
+        await handle(item);
+      } catch (error) {
+        state.visits.push(failedVisit(role, item.url, isFileUrl(item.url) ? 'file' : 'page', false, error));
+      } finally {
+        active -= 1;
+      }
+      await sleep(delayMs);
+    }
+  }
+
+  try {
+    enqueue(intake(startUrl, startUrl), 0);
+    for (const url of await sitemapUrls(context)) enqueue(intake(url, startUrl), 1);
+    await Promise.all(Array.from({ length: config.concurrency }, worker));
+  } finally {
+    state.pagesVisited[role] = visited;
+    if (roleStop) state.limitWarnings.push(roleStop);
+    await context.close();
+  }
+}
+
+/** Open each template's first URL as every role that never reached it. */
+async function probeAccess(browser, statePaths) {
+  if (config.roles.length < 2) return;
+  const templates = new Map();
+  for (const record of state.visits) {
+    const template = index.templateOf(record.url);
+    const entry = templates.get(template) ?? { url: record.url, kind: record.kind, roles: new Set() };
+    if (record.kind === 'file') entry.kind = 'file';
+    entry.roles.add(record.role);
+    templates.set(template, entry);
+  }
+  for (const role of config.roles) {
+    const context = await openContext(browser, statePaths[role]);
+    try {
+      for (const entry of templates.values()) {
+        if (entry.roles.has(role)) continue;
+        if (shouldStop()) return;
+        const probe = entry.kind === 'file' ? visitFile : visitPage;
+        try {
+          state.visits.push((await probe(role, context, entry.url, { probe: true })).record);
+        } catch (error) {
+          state.visits.push(failedVisit(role, entry.url, entry.kind, true, error));
+        }
+        await sleep(config.delayMs);
+      }
+    } finally {
+      await context.close();
+    }
+  }
+}
+
+function writeOutputs() {
+  state.finishedAt = new Date().toISOString();
+  if (stopReason) state.limitWarnings.unshift(`${stopReason} — partial site map`);
+  mkdirSync(crawlDir, { recursive: true });
+  const siteMap = buildSiteMap(
+    { ...state, unsafeSkipped: [...state.unsafeSkipped], externalOrigins: [...state.externalOrigins] },
+    index,
+  );
+  writeFileSync(path.join(crawlDir, 'site-map.json'), JSON.stringify(siteMap, null, 2));
+  writeFileSync(path.join(crawlDir, 'site-map.md'), renderSiteMap(siteMap));
+  return siteMap;
+}
+
+const browser = await chromium.launch({ handleSIGINT: false });
+const statePaths = {};
+try {
+  for (const role of config.roles) {
+    statePaths[role] = await login(browser, { baseUrl: origin, role, stateDir, loginPath: config.loginPath });
+  }
+} catch (error) {
+  await browser.close();
+  if (!(error instanceof LoginError)) throw error;
+  console.error(error.message);
+  process.exit(1);
+}
+
+let siteMap;
+try {
+  for (const role of config.roles) {
+    if (shouldStop()) break;
+    await crawlRole(browser, role, statePaths);
+  }
+  await probeAccess(browser, statePaths);
+} finally {
+  await browser.close().catch((error) => console.error(`browser did not close cleanly: ${error.message}`));
+  siteMap = writeOutputs();
+}
+
+console.log(`Crawled ${startUrl} as ${config.roles.join(', ')}`);
+console.log(`  pages visited: ${config.roles.map((role) => `${role} ${state.pagesVisited[role] ?? 0}`).join(', ')}`);
+console.log(`  templates: ${siteMap.templates.length}  unsafe skipped: ${siteMap.warnings.unsafeSkipped.count}`);
+for (const warning of siteMap.limitWarnings) console.log(`  WARNING: ${warning}`);
+console.log(`  site map -> ${path.join(crawlDir, 'site-map.md')}`);
+process.exit(0);
