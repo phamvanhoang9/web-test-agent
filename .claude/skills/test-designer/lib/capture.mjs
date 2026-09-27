@@ -160,3 +160,50 @@ ${buttons.map((b) => `- ${b.label || '(no text)'}`).join('\n') || '_none_'}
 ${links.slice(0, 30).map((l) => `- ${l.label || '(no text)'} → ${l.href}`).join('\n') || '_none_'}${links.length > 30 ? `\n- … and ${links.length - 30} more` : ''}
 `;
 }
+
+const MAX_REDIRECTS = 5;
+
+/**
+ * Status, type and size of a file link without downloading it. Uses Node's fetch rather
+ * than Playwright's context.request, which always buffers the whole body: HEAD first, and
+ * if the server refuses HEAD (405/501) a GET for one byte (Range: bytes=0-0). Either way the
+ * body is cancelled as soon as headers arrive, so a server that ignores Range and starts
+ * sending the whole file is cut off. Cookies come from `context`, so the probe runs as the
+ * logged-in role. Redirects are followed by hand: one to `loginPath` is reported, one that
+ * `canFollow` rejects is not taken.
+ */
+export async function probeFile(context, url, { loginPath = '/login', canFollow = () => true } = {}) {
+  let current = url;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+    const cookie = (await context.cookies(current)).map((c) => `${c.name}=${c.value}`).join('; ');
+    const headers = cookie ? { cookie } : {};
+    let method = 'head';
+    let response = await fetch(current, { method: 'HEAD', headers, redirect: 'manual' });
+    if (response.status === 405 || response.status === 501) {
+      method = 'range';
+      response = await fetch(current, { headers: { ...headers, range: 'bytes=0-0' }, redirect: 'manual' });
+    }
+    await response.body?.cancel();
+    const location = response.headers.get('location');
+    if (response.status >= 300 && response.status < 400 && location) {
+      const next = new URL(location, current).href;
+      if (new URL(next).pathname === loginPath) {
+        return { outcome: 'login-redirect', status: response.status, method, finalUrl: next };
+      }
+      if (!canFollow(next)) return { outcome: 'blocked-redirect', status: response.status, method, finalUrl: next };
+      current = next;
+      continue;
+    }
+    const size = response.headers.get('content-range')?.split('/')[1] ?? response.headers.get('content-length');
+    const total = size == null ? NaN : Number(size);
+    return {
+      outcome: 'ok',
+      status: response.status,
+      method,
+      finalUrl: current,
+      contentType: response.headers.get('content-type') ?? '',
+      bytes: Number.isFinite(total) ? total : null,
+    };
+  }
+  return { outcome: 'too-many-redirects', status: null, method: 'head', finalUrl: current };
+}
