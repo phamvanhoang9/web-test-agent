@@ -44,7 +44,10 @@ follows same-origin links, `sitemap.xml` and the routes declared in the SPA's JS
   `crawl/pages/<...>/exploration.md` (and its screenshot) only for templates you judge risky.
 - **Access matrix** rows where roles differ are authorization cases (P0/P1). A `[file]` row
   that differs is a data-exposure risk (P0); also propose an ID-swap (IDOR) case — the crawler
-  never tries other IDs.
+  never tries other IDs. A cell reading `redirected → /home` means the page answered but the
+  app (often the SPA itself, after an HTTP 200) sent that role elsewhere: the UI refuses it.
+  Pair it with a case that calls the page's API directly — a UI guard proves nothing about
+  the server.
 - **Routes from JS bundle** lists routes no link points to — pages the UI only reaches through
   buttons. `opened` ones are crawled like links; `unsafe` and `no-id` (a `:param` no crawled
   page could fill) ones are not — cover them with chrome-devtools MCP if they matter.

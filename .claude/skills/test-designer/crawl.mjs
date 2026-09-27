@@ -196,6 +196,18 @@ async function visitFile(role, context, url, { probe = false } = {}) {
   };
 }
 
+/**
+ * Where a visit really ended, when that is a different page than the one asked for — a
+ * server redirect, or an SPA that answered 200 and then sent the role elsewhere. Same-origin
+ * targets are reported as a path; a change of query or trailing slash is not a redirect.
+ */
+function redirectTarget(url, finalUrl) {
+  if (!/^https?:/.test(finalUrl)) return null; // about:blank / chrome-error after a failed load
+  const landed = new URL(finalUrl);
+  if (landed.origin !== origin) return landed.href;
+  return index.templateOf(landed.href) === index.templateOf(url) ? null : landed.pathname;
+}
+
 async function visitPage(role, context, url, { probe = false } = {}) {
   const template = index.templateOf(url);
   const page = await context.newPage();
@@ -203,10 +215,12 @@ async function visitPage(role, context, url, { probe = false } = {}) {
     const result = await capturePage(page, url, { waitStrategy: 'settled' });
     if (result.isFile) return visitFile(role, context, url, { probe });
     const loginRedirect = new URL(result.finalUrl).pathname === config.loginPath;
+    const redirectedTo = loginRedirect ? null : redirectTarget(url, result.finalUrl);
     const record = {
       role, url, kind: 'page', probe,
       status: result.status,
       loginRedirect,
+      redirectedTo,
       skeleton: result.skeleton,
       errors: result.consoleMsgs.filter((m) => m.type !== 'warning'),
       failedRequests: result.network
@@ -214,7 +228,7 @@ async function visitPage(role, context, url, { probe = false } = {}) {
         .map(({ status, method, url: requestUrl }) => ({ status, method, url: requestUrl })),
       evidence: null,
     };
-    const capturable = !probe && !loginRedirect && result.status !== null && result.status < 400;
+    const capturable = !probe && !loginRedirect && !redirectedTo && result.status !== null && result.status < 400;
     if (capturable && !fullCaptures.has(template)) {
       fullCaptures.add(template);
       const dir = pageDir(url);

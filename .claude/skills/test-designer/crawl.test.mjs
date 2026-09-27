@@ -77,6 +77,12 @@ describe('crawl as admin and user', () => {
     assert.deepEqual(map.access['/'], { admin: 'allowed', user: 'allowed' });
   });
 
+  test('a page the SPA sends a role away from is "redirected", not "allowed"', () => {
+    assert.deepEqual(map.access['/spa-admin'], { admin: 'allowed', user: 'redirected → /' });
+    const evidence = readFileSync(path.join(run.crawlDir, row('/spa-admin').evidence), 'utf8');
+    assert.match(evidence, /\*\*Final URL:\*\* http:\/\/127\.0\.0\.1:\d+\/spa-admin\n/);
+  });
+
   test('files: attachment reclassified, ranged fallback, broken file', () => {
     assert.equal(row('/files/get').kind, 'file');
     assert.ok(row('/legacy/report.pdf').visits.every((v) => v.method === 'range'));

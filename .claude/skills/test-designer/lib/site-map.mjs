@@ -10,6 +10,8 @@ const MESSAGE_LIMIT = 200;
 export function classifyAccess(visit) {
   if (!visit) return 'not-probed';
   if (visit.loginRedirect) return 'login-redirect';
+  // An SPA answers 200 and then sends the role elsewhere: the UI refused the page.
+  if (visit.redirectedTo) return `redirected → ${visit.redirectedTo}`;
   if (visit.status === 401 || visit.status === 403) return 'denied';
   if (visit.status === null) return 'error';
   if (visit.status >= 200 && visit.status < 300) return 'allowed';
@@ -46,7 +48,10 @@ function templateRow(template, urls, visits) {
     status: first?.status ?? null,
     contentType: first?.contentType ?? null,
     bytes: first?.bytes ?? null,
-    skeletonMismatch: skeletonMismatch(crawled.filter((v) => v.skeleton && !v.loginRedirect).map((v) => v.skeleton)),
+    skeletonMismatch: skeletonMismatch(
+      crawled.filter((v) => v.skeleton && !v.loginRedirect && !v.redirectedTo).map((v) => v.skeleton),
+    ),
+    redirectsTo: crawled.length && crawled.every((v) => v.redirectedTo) ? crawled[0].redirectedTo : null,
     visits,
   };
 }
@@ -90,15 +95,19 @@ export function buildSiteMap(state, index) {
     return { template, type, text, count };
   });
 
-  // A queued bundle route is 'opened' once any role visited its URL.
+  // A queued bundle route is 'opened' once any role visited its URL without being sent away.
+  const queuedOutcome = (url) => {
+    const visits = state.visits.filter((v) => v.url === url);
+    if (visits.some((v) => !v.redirectedTo)) return 'opened';
+    return visits.length ? `redirected → ${visits[0].redirectedTo}` : 'not visited';
+  };
   const bundleRoutes = state.bundle
     ? {
       scripts: state.bundle.scripts,
       relative: state.bundle.relative,
       routes: state.bundle.routes.map(({ route, url, outcome }) => {
-        const opened = outcome === 'queued' && state.visits.some((v) => v.url === url);
-        const result = outcome === 'queued' ? (opened ? 'opened' : 'not visited') : outcome;
-        return { route, url, outcome: result, template: opened ? index.templateOf(url) : null };
+        const result = outcome === 'queued' ? queuedOutcome(url) : outcome;
+        return { route, url, outcome: result, template: result === 'opened' ? index.templateOf(url) : null };
       }),
     }
     : null;
@@ -212,7 +221,7 @@ export function renderSiteMap(map) {
         ['Template', 'URLs seen', 'Fields', 'Buttons', 'Errors', 'Failed req', 'Evidence'],
         pages.map((t) => [
           t.template, t.urlsSeen, t.fields, t.buttons, t.errors, t.failedRequests,
-          t.evidence ? `[exploration](${t.evidence})` : null,
+          t.evidence ? `[exploration](${t.evidence})` : t.redirectsTo && `redirects to ${t.redirectsTo}`,
         ]),
       )
       : '_No pages found._',

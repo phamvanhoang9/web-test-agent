@@ -80,7 +80,7 @@ function home(role, { slowFontHome, denyByRedirect }) {
     : '';
   const font = slowFontHome ? '<style>@font-face{font-family:slow;src:url(/never-ends)} body{font-family:slow}</style>' : '';
   return html('Home', `${font}${deniedLinks}<script type="module" src="/assets/app.js"></script><header><nav>
-<a href="/orders">Orders</a> <a href="/products">Products</a> <a href="/broken">Broken</a> ${adminLinks}
+<a href="/orders">Orders</a> <a href="/products">Products</a> <a href="/broken">Broken</a> <a href="/spa-admin">Console</a> ${adminLinks}
 <a href="/docs/manual.pdf">Manual</a> <a href="/files/get?id=3">Export file</a>
 <a href="/legacy/report.pdf">Legacy report</a> <a href="/docs/missing.pdf">Missing</a>
 <a href="/logout">Log out</a> <a href="/items/1/delete">Delete item</a> <a href="/reports/export.csv">Export CSV</a>
@@ -210,6 +210,11 @@ export async function startFixture({
     if (order) {
       const trap = order[1] === '1' ? '<img src="/logout" alt="">' : '';
       return send(200, html(`Order ${order[1]}`, `<main><h1>Order ${order[1]}</h1><button>Refund</button>${trap}</main>`));
+    }
+    if (pathname === '/spa-admin') {
+      // An SPA guard: every role gets 200, non-admins are then sent home by the page itself.
+      const body = role === 'admin' || !requireAuth ? '<main><h1>Console</h1></main>' : "<script>location.replace('/')</script>";
+      return send(200, html('Console', body));
     }
     if (receipt) return send(200, html(`Receipt ${receipt[1]}`, `<main><h1>Receipt ${receipt[1]}</h1></main>`));
     if (pathname === '/assets/app.js') return send(200, APP_BUNDLE, 'text/javascript');

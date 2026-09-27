@@ -32,6 +32,7 @@ test('classifyAccess', () => {
   assert.equal(classifyAccess({ status: 200, loginRedirect: true }), 'login-redirect');
   assert.equal(classifyAccess({ status: 404, loginRedirect: false }), 'http 404');
   assert.equal(classifyAccess({ status: null, loginRedirect: false }), 'error');
+  assert.equal(classifyAccess({ status: 200, loginRedirect: false, redirectedTo: '/home' }), 'redirected → /home');
 });
 
 test('skeletonMismatch flags samples whose structure differs', () => {
@@ -99,6 +100,24 @@ test('bundle routes: queued routes resolve to opened or not visited, with their 
   assert.ok(md.includes('## Routes from JS bundle'));
   assert.ok(md.includes('3 relative route(s)'));
   assert.equal(renderSiteMap(siteMap([pageVisit('admin', '/')])).includes('## Routes from JS bundle'), false);
+});
+
+test('client-side redirects are not evidence, not skeletons, and not "allowed"', () => {
+  const map = siteMap([
+    pageVisit('user', '/admin', { redirectedTo: '/home', skeleton: { fields: 0, buttons: 40, landmarks: ['main'] } }),
+    pageVisit('admin', '/admin', { evidence: 'pages/admin-1/exploration.md' }),
+    pageVisit('user', '/register', { redirectedTo: '/home' }),
+  ], {
+    bundle: { scripts: 1, relative: 0, routes: [{ route: '/register', url: `${ORIGIN}/register`, outcome: 'queued' }] },
+  });
+
+  assert.deepEqual(map.access['/admin'], { admin: 'allowed', user: 'redirected → /home' });
+  const admin = map.templates.find((t) => t.template === '/admin');
+  assert.equal(admin.skeletonMismatch, false, 'the redirected sample is not compared');
+  const register = map.templates.find((t) => t.template === '/register');
+  assert.equal(register.redirectsTo, '/home');
+  assert.equal(map.bundleRoutes.routes[0].outcome, 'redirected → /home');
+  assert.ok(renderSiteMap(map).includes('| redirects to /home |'));
 });
 
 test('a single-role crawl has no access matrix', () => {
