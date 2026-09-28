@@ -1,11 +1,14 @@
 # Self-validation checklist (run before declaring a test session done)
 
 DESIGN — test-designer (`artifacts/<host>/test-plan.md`)
-- [ ] Ran `explore.mjs` (or chrome-devtools MCP for hard sites); opened and **looked at** the screenshot
+- [ ] Ran `explore.mjs`, or `crawl.mjs` for a large or login-gated site (chrome-devtools MCP for hard sites); opened and **looked at** the screenshot(s)
+- [ ] If crawled: read the `site-map.md` warnings (limits, skipped URLs) and stated any incomplete coverage in the plan; every access-matrix row that differs between roles maps to a TC or a stated reason
 - [ ] Noted redirects, HTTP status, console errors, failed requests
 - [ ] Risks scored (probability × impact); every score ≥6 maps to a covering TC
 - [ ] TC table filled: each row has P, **Tool (PW/MCP)**, steps, **verifiable** Kỳ vọng
 - [ ] Coverage checklist reviewed — no whole category silently skipped
+- [ ] Opened (and cancelled) every dialog, menu and panel the crawler could not click into
+- [ ] `coverage.mjs` exits 0: every route and labelled control maps to a TC or a line in "không test (và lý do)"
 - [ ] User reviewed/approved the table (human gate) before generating
 
 GENERATE — script-generator (`artifacts/<host>/tests/*.spec.mjs`)

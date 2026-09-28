@@ -23,7 +23,16 @@ Config derives the host from `BASE_URL` → runs `artifacts/<host>/tests`, write
 `artifacts/<host>/test-plan.md`, drive the live browser yourself with
 `mcp__chrome-devtools__*` (navigate_page, click, fill, take_snapshot,
 list_console_messages, list_network_requests), follow "Các bước", judge "Kỳ vọng",
-and record the verdict. Append every MCP case to `artifacts/<host>/mcp-results.json`:
+and record the verdict. **Run them without asking** — the approved plan is the permission.
+
+**chrome-devtools MCP not connected?** Do not skip the case: drive the same steps yourself
+with a throwaway Playwright script in your scratchpad. Log in with `TEST_EMAIL` /
+`TEST_PASSWORD` from the environment, and for microphone or screen cases launch Chromium with
+`--use-fake-ui-for-media-stream --use-fake-device-for-media-stream` and grant the `microphone`
+permission. Say in the case's `note` that it ran through Playwright. Record `skipped` only when
+neither route can do it (e.g. a native dialog outside the page).
+
+Append every MCP case to `artifacts/<host>/mcp-results.json`:
 ```json
 [
   { "tc": "TC-010", "prio": "P1", "status": "passed",  "title": "Drag-drop động", "durationMs": 1200 },
@@ -59,7 +68,13 @@ BASE_URL=https://brse.ai node .claude/skills/test-runner/report.mjs
 # (shortcut: BASE_URL=https://brse.ai npm run gate)
 ```
 `report.mjs` merges `results.json` + `mcp-results.json` → writes
-`artifacts/<host>/quality-gate.md` and prints a summary. **Relay that summary to the
+`artifacts/<host>/quality-gate.md` and prints a summary. It also rewrites the **Status** column
+of `test-plan.md` from this run (✅ / ❌ / ⏭️, ⬜ for a case this run did not include), and
+renames a `heal-proposal.md` older than this run to `heal-proposal.<date>-<time>.md`.
+
+**Run the MCP cases after Playwright.** `report.mjs` treats `mcp-results.json` written before
+the Playwright run started as left over from an earlier run: those cases count as skipped
+(not verified) and the gate says so. Rewrite the whole file on every run. **Relay that summary to the
 user** — don't just leave the file. Always tell them:
 - decision **PASS / CONCERNS / BLOCKED / FAIL** + the rationale
 - **counts**: total, passed, failed, skipped — and per-priority pass rate (P0/P1/P2/P3)
@@ -75,14 +90,15 @@ over executed cases only. Exit codes: **1 on FAIL, 2 on BLOCKED**, 0 otherwise �
 CI/orchestrator can block on either, and tell them apart.
 
 ## On failure
-Hand failing cases to **self-healer** (diagnoses on the live page, proposes a fix for
-your approval), then re-run this phase. Distinguish a real app bug (report it, don't
+Hand failing cases to **self-healer** (diagnoses on the live page, explains each fix in
+plain language and waits for approval), then re-run this phase: the whole suite, so a fix
+that breaks another case shows up. Distinguish a real app bug (report it, don't
 "fix" the test) from a flaky/incorrect script (heal it).
 
 ## Gotchas
 - `report.mjs` needs `BASE_URL` (or a host arg) to know which `artifacts/<host>/` to read.
 - If only MCP cases exist, there's no `results.json` — `report.mjs` still works from `mcp-results.json` alone.
-- chrome-devtools MCP must be connected for `Tool=MCP` cases; if absent, run the PW cases and report the MCP ones as skipped (say so).
+- chrome-devtools MCP only loads at session start. If it is absent, drive `Tool=MCP` cases with a scratch Playwright script (see B above) instead of skipping them.
 - **A button stuck on `Starting...` / `Connecting...` with no console error is a native media
   dialog, not an app bug.** `getUserMedia`/`getDisplayMedia` opens the browser's own
   "Choose what to share" window — it is outside the DOM, so it never appears in a snapshot

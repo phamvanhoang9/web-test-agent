@@ -8,6 +8,14 @@
 - Môi trường: <staging | production>  (test ghi/sửa dữ liệu → dùng staging)
 - Tài khoản test: <có / không — không dán mật khẩu thật; dùng env TEST_EMAIL/TEST_PASSWORD>
 
+## Route / chức năng không test (và lý do)
+> Mọi route và mọi nút/ô nhập/link mà exploration tìm thấy phải có TC, hoặc nằm ở bảng này.
+> `coverage.mjs` kiểm cả hai.
+
+| Route / chức năng | Lý do không test | Cần gì để test |
+|---|---|---|
+| <vd: `/teams/config`> | <vd: chỉ chạy trong Microsoft Teams> | <vd: tenant M365 + app đã cài> |
+
 ## Risk assessment (probability × impact = score)
 Score ≥6 ⇒ P0 · 3–4 ⇒ P1 · 1–2 ⇒ P2/P3. Category: SEC/PERF/DATA/BUS/TECH/OPS.
 

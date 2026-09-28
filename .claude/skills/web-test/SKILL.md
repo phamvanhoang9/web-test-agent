@@ -18,7 +18,7 @@ from the URL, e.g. `artifacts/brse.ai/`). Run commands from the project root.
 | 2 REVIEW | _(human)_ | user edits/approves the TC table — it's the source of truth | — |
 | 3 GENERATE | **script-generator** | turn each `Tool=PW` row into a Playwright spec | `artifacts/<host>/tests/*.spec.mjs` |
 | 4 RUN+GATE | **test-runner** | run PW specs + execute `Tool=MCP` cases via chrome-devtools → merge → gate → **report back** | `artifacts/<host>/{results.json,mcp-results.json,quality-gate.md,html-report}` |
-| 5 HEAL | **self-healer** | on failures, diagnose on the live page → **propose a fix (waits for approval)** | edited specs (after you approve) |
+| 5 HEAL | **self-healer** | on failures, diagnose on the live page → **explain each fix in plain language (waits for approval)** | `heal-proposal.md`, then edited specs (after you approve) |
 
 Invoke each sub-skill in turn (it auto-loads, or read `.claude/skills/<name>/SKILL.md`).
 Stop at phase 2 for the user to approve the plan. Loop 4↔5 until the gate is green

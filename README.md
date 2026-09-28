@@ -61,7 +61,7 @@ flowchart LR
     G -->|*.spec.mjs| R[4 · RUN + GATE<br/>test-runner]
     R -->|PASS / CONCERNS / BLOCKED| OK([quality-gate.md])
     R -->|FAIL| S[5 · HEAL<br/>self-healer]
-    S -->|proposed diff| H2{approval}
+    S -->|proposed fix| H2{approval}
     H2 --> R
 
     style H fill:#fff4e6,stroke:#d97757,stroke-width:2px
@@ -71,7 +71,7 @@ flowchart LR
 
 Two points in that loop are **human gates**, marked in orange. The workflow stops at both.
 It will not generate specs from a plan you have not approved, and the healer will not edit a
-spec without showing you the diff first. Everything else runs unattended.
+spec without first explaining, in plain language, what it will change. Everything else runs unattended.
 
 ## Quick start
 
@@ -84,6 +84,10 @@ Then drive the phases. `BASE_URL` is the only knob you need:
 ```bash
 # 1 · explore the live site and collect evidence
 node .claude/skills/test-designer/explore.mjs https://example.com
+#     large or login-gated site: crawl it instead (roles and credentials from .env)
+node .claude/skills/test-designer/crawl.mjs https://example.com
+#     after the agent writes test-plan.md: every route and control covered? (exit 1 = gaps)
+node .claude/skills/test-designer/coverage.mjs https://example.com
 
 # 2 · review and edit artifacts/example.com/test-plan.md  (your call, not the agent's)
 
@@ -129,11 +133,11 @@ npx playwright show-report artifacts/example.com/html-report
 
 | # | Phase | Skill | What happens | Output |
 |---|---|---|---|---|
-| 1 | DESIGN | [`test-designer`](.claude/skills/test-designer/SKILL.md) | Drives headless Chromium over the live site, captures evidence, scores risk (probability x impact), writes a test plan | `test-plan.md`, `exploration.md`, `screenshot.png`, `console.json`, `network.json` |
+| 1 | DESIGN | [`test-designer`](.claude/skills/test-designer/SKILL.md) | Drives headless Chromium over the live site, captures evidence, scores risk (probability x impact), writes a test plan that covers every route and control it found (`coverage.mjs` checks) | `test-plan.md`, `coverage.md`, `exploration.md`, `screenshot.png`, `console.json`, `network.json`; with the crawler, `crawl/site-map.md` |
 | 2 | REVIEW | *human* | You edit and approve the test-case table. It is the source of truth downstream | the edited table |
 | 3 | GENERATE | [`script-generator`](.claude/skills/script-generator/SKILL.md) | Turns each `Tool=PW` row into an idiomatic Playwright test | `tests/*.spec.mjs` |
 | 4 | RUN + GATE | [`test-runner`](.claude/skills/test-runner/SKILL.md) | Runs the specs, drives `Tool=MCP` cases live, merges both, decides the gate, reports back | `results.json`, `mcp-results.json`, `quality-gate.md`, `html-report/` |
-| 5 | HEAL | [`self-healer`](.claude/skills/self-healer/SKILL.md) | On failure only: reproduces on the live page, separates real bugs from broken scripts, proposes a diff | proposed spec edits, pending approval |
+| 5 | HEAL | [`self-healer`](.claude/skills/self-healer/SKILL.md) | On failure only: reproduces on the live page, separates real bugs from broken scripts, explains each fix in plain language | `heal-proposal.md`, pending approval |
 
 [`web-test`](.claude/skills/web-test/SKILL.md) is the orchestrator that sequences them;
 [`checklist.md`](.claude/skills/web-test/checklist.md) is the exit criteria to run through
@@ -217,16 +221,23 @@ One domain, one self-contained bundle. The host comes from `BASE_URL`, sanitized
 
 ```
 artifacts/example.com/
-├── test-plan.md         # committed — the contract you approved
+├── test-plan.md         # the contract you approved; the gate fills in its Status column
 ├── tests/               # committed — the generated specs
 │   └── login.spec.mjs
 ├── exploration.md       # regenerated — what the explorer found
 ├── screenshot.png       # regenerated
 ├── console.json         # regenerated — console errors and warnings
 ├── network.json         # regenerated — request log, failures flagged
+├── coverage.md          # regenerated — what the plan covers, gaps first
+├── crawl/               # regenerated — crawl.mjs output
+│   ├── site-map.md      #   templates, files, access matrix, bundle routes, health, warnings
+│   ├── site-map.json    #   the same, untruncated
+│   └── pages/<url>/     #   exploration.md + screenshot.png per template
+├── .auth/<role>.json    # regenerated — saved login sessions (live tokens)
 ├── results.json         # regenerated — Playwright output
 ├── mcp-results.json     # regenerated — live-driven case verdicts
 ├── quality-gate.md      # regenerated — the decision
+├── heal-proposal.md     # the healer's plain-language proposal; archived with a date on the next run
 └── html-report/         # regenerated
 ```
 
@@ -241,10 +252,13 @@ any URL and you get your own bundle in this shape.
 |---|---|
 | `BASE_URL` | **Required for phases 4 and 5.** Sets the Playwright `baseURL` and resolves `artifacts/<host>/`. Specs navigate with `page.goto('/')`, never absolute URLs |
 | `WEBTEST_HOST` | Overrides the host derived from `BASE_URL`, when the bundle name should differ from the target |
-| `TEST_EMAIL`, `TEST_PASSWORD` | Test-account credentials. Read from the environment, never written into a plan or a spec |
+| `TEST_EMAIL`, `TEST_PASSWORD` | Test-account credentials for the default role. Read from the environment, never written into a plan or a spec |
+| `WEBTEST_ROLES` | Roles `crawl.mjs` logs in as, comma-separated (e.g. `admin,user`). Role `X` reads `TEST_X_EMAIL` / `TEST_X_PASSWORD` |
+| `WEBTEST_LOGIN_PATH` | Login page path for `crawl.mjs`, default `/login` |
 
-Copy [`.env.example`](.env.example) to `.env` for the credential pair. `.env` is gitignored —
-credentials never reach a commit.
+Copy [`.env.example`](.env.example) to `.env`, or to `.env.<host>` for credentials that belong
+to one site (read first, wins over `.env`). Both the crawler and the Playwright config load
+them; variables set in the shell win. `.env*` is gitignored — credentials never reach a commit.
 
 Cross-browser and mobile projects are pre-declared and commented out in
 [`playwright.config.mjs`](.claude/skills/test-runner/playwright.config.mjs) — uncomment to
@@ -257,7 +271,7 @@ The parts of this workflow that exist to keep it honest:
 - **A failing test is a hypothesis, not a verdict.** The healer reproduces on the live page
   and decides whether it found a real application bug or a broken script. A real bug gets
   reported with evidence. It is never "healed" into passing.
-- **Nothing is applied without approval.** The healer proposes a diff and waits.
+- **Nothing is applied without approval.** The healer explains the fix in plain language and waits.
 - **Locators are role- and label-based.** `getByRole` and `getByLabel` over brittle CSS;
   web-first assertions over `waitForTimeout` as a synchronisation mechanism. See
   [`selector-resilience.md`](.claude/skills/script-generator/resources/knowledge/selector-resilience.md).
@@ -282,12 +296,22 @@ The parts of this workflow that exist to keep it honest:
 | Empty button label in the exploration outline | An icon-only button. Target its `aria-label`, not its text |
 | MCP cases all reported as skipped | The `chrome-devtools` MCP server is not connected. It must be declared in [`.mcp.json`](.mcp.json) — a plain `mcp.json` is not read — and servers only load at session start, so restart the session after adding it |
 | A button sits on `Starting...` forever, no console error | The page called `getUserMedia`/`getDisplayMedia` and the browser's native "Choose what to share" picker is waiting outside the DOM, where no snapshot sees it and no click reaches it. `.mcp.json` launches Chrome with `--use-fake-ui-for-media-stream` and `--auto-select-desktop-capture-source` to answer it automatically — effective from the next session. See [`media-capture-cases.md`](.claude/skills/test-runner/resources/knowledge/media-capture-cases.md). It is never an application bug |
+| `crawl.mjs` exits with `login failed ... field-not-found` | The login form is not at `/login`, or its fields have no email/password label. Set `WEBTEST_LOGIN_PATH`; SSO and MFA logins are not supported |
+| `site-map.md` opens with a Warning | The crawl stopped early (page or time limit, rate limiting, a session that kept expiring). Raise `--max-pages` / `--max-minutes`, or narrow the crawl with `--exclude` |
 
 ---
 
 ## Requirements
 
-Node 18 or later, and Chromium via `npx playwright install chromium`. The `chrome-devtools`
-MCP server is optional, and required only for `Tool=MCP` cases and live-page healing.
+Node 20.12 or later (21 or later for `npm run test:unit`), and Chromium via `npx playwright install chromium`. The `chrome-devtools`
+MCP server is optional, and required only for `Tool=MCP` cases and live-page healing. Claude
+Code asks once before it starts a project's MCP server; to pre-approve it and its tools, add to
+`.claude/settings.local.json` (machine-local, not committed):
+
+```json
+{ "enabledMcpjsonServers": ["chrome-devtools"], "permissions": { "allow": ["mcp__chrome-devtools"] } }
+```
+
+`claude mcp list` should then show `chrome-devtools ... ✔ Connected`.
 
 For working conventions and the internal contracts between phases, see [CLAUDE.md](CLAUDE.md).

@@ -40,14 +40,22 @@ Map the symptom to a cause:
 Selector guidance: `resources/knowledge/selector-resilience.md` (in script-generator).
 
 ## Propose — don't apply
-Present, per failing case:
-1. **Root cause** (with the evidence you saw on the live page).
-2. **Real bug or test fix?**
-3. If a test fix: the exact **diff** to the spec in `artifacts/<host>/tests/…`.
-4. Wait for the user to approve. **Only after approval**, apply the edit, then ask
-   test-runner to re-run; loop until green or remaining failures are confirmed real bugs.
+The reader is a tester, not a developer: **never hand over a diff or a patch file.** Write the
+proposal in the user's language, in plain words, and save the same content to
+`artifacts/<host>/heal-proposal.md` so it can be shared.
+
+1. **Real app bugs** first — one row each: TC, what the user does, what should happen, what
+   happens instead, evidence (screenshot path, HTTP status). These tests stay red.
+2. **Test fixes** — one row each: TC, what went wrong in plain words ("the Upload button opens
+   a window first; the test expected a file picker"), and what the test will do instead.
+3. **Passed, but wrong** — a test that passed for the wrong reason is worse than a failure;
+   list it with the same two columns.
+4. Ask one question: apply the test fixes and re-run the whole suite? **Only after a yes**,
+   edit the specs, re-run, and loop until the remaining failures are all real bugs.
+
+Show code only if the user asks for it.
 
 ## Gotcha
-- chrome-devtools MCP must be connected. If absent, diagnose from the Playwright error +
-  trace (`npx playwright show-trace <trace.zip>`) and say the live-page
-  inspection was skipped.
+- chrome-devtools MCP must be connected for live inspection. If absent, diagnose from the
+  failure screenshot and trace (`npx playwright show-trace <trace.zip>`), and reproduce the step
+  with a scratch Playwright script against the live page.

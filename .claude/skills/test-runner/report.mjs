@@ -15,6 +15,11 @@
 //         skipped record should always carry one; it is printed in the gate report.
 // Writes:
 //   artifacts/<host>/quality-gate.md
+//   artifacts/<host>/test-plan.md        (Status column only: ✅ / ❌ / ⏭️, ⬜ = not in this run)
+//
+// Stale inputs: MCP results written before the Playwright run started belong to an older
+// run, so they count as skipped (not verified) with a note. A heal-proposal.md written
+// before the run started is renamed heal-proposal.<date>-<time>.md.
 //
 // Priority from a [P0]..[P3] tag in the title (or the `prio` field for MCP);
 // TC id from a TC-\d+ token (or the `tc` field). Gate thresholds (BMAD):
@@ -22,7 +27,7 @@
 //   P2/P3 failures informational. A P0 case that was skipped (unverified, not broken)
 //   yields BLOCKED, not FAIL. Exit code: FAIL → 1, BLOCKED → 2, otherwise 0.
 
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, renameSync, statSync } from 'node:fs';
 import path from 'node:path';
 
 const base = process.env.BASE_URL;
@@ -38,16 +43,20 @@ const dir = path.join('artifacts', host);
 const pwPath = path.join(dir, 'results.json');
 const mcpPath = path.join(dir, 'mcp-results.json');
 const OUT = path.join(dir, 'quality-gate.md');
+const planPath = path.join(dir, 'test-plan.md');
+const healPath = path.join(dir, 'heal-proposal.md');
 
 const prioOf = (t) => t.match(/\[(P[0-3])\]/)?.[1] || 'P1';
 const tcOf = (t) => t.match(/\b(TC-\d+)\b/)?.[1] || '—';
 const cleanTitle = (t) => t.replace(/\[P[0-3]\]\s*/, '').replace(/^TC-\d+\s*/, '');
 
 const rows = [];
+let runStart = null; // when the Playwright run began; anything written before it is stale
 
 // ---- Playwright results ----
 if (existsSync(pwPath)) {
   const data = JSON.parse(readFileSync(pwPath, 'utf8'));
+  if (data.stats?.startTime) runStart = new Date(data.stats.startTime);
   const walk = (suite, file) => {
     const f = suite.file || file;
     for (const s of suite.specs || []) {
@@ -72,17 +81,23 @@ if (existsSync(pwPath)) {
 }
 
 // ---- chrome-devtools-MCP results (agent-written) ----
+let staleMcp = 0;
 if (existsSync(mcpPath)) {
   const mcp = JSON.parse(readFileSync(mcpPath, 'utf8'));
+  const written = statSync(mcpPath).mtime;
+  const stale = runStart !== null && written < runStart;
   for (const r of Array.isArray(mcp) ? mcp : []) {
     const title = r.title || '';
-    const skipped = r.status === 'skipped' || r.status === 'skip';
+    const skipped = stale || r.status === 'skipped' || r.status === 'skip';
+    if (stale) staleMcp += 1;
     rows.push({
       tool: 'MCP',
       title,
       ok: !skipped && (r.status === 'passed' || r.status === 'pass' || r.ok === true),
       skipped,
-      note: r.note || '',
+      note: stale
+        ? `mcp-results.json is older than this run (written ${written.toISOString()}, previous verdict: ${r.status}) — re-run this case.`
+        : r.note || '',
       duration: r.durationMs ?? 0,
       loc: 'chrome-devtools-mcp',
       prio: r.prio || prioOf(title),
@@ -196,8 +211,28 @@ quality_gate:
 
 writeFileSync(OUT, md);
 
+// ---- Keep the plan's Status column in step with this run ----
+let planUpdated = false;
+if (existsSync(planPath)) {
+  const symbol = new Map(rows.map((r) => [r.tc, r.skipped ? '⏭️' : r.ok ? '✅' : '❌']));
+  const plan = readFileSync(planPath, 'utf8');
+  const next = plan.replace(/^(\| (TC-\d+) \|.*\| )\S+( \|\r?)$/gm, (_, head, tc, tail) => `${head}${symbol.get(tc) ?? '⬜'}${tail}`);
+  if (next !== plan) writeFileSync(planPath, next);
+  planUpdated = true;
+}
+
+// ---- Archive a heal proposal that belongs to an earlier run ----
+let archivedHeal = null;
+if (runStart && existsSync(healPath) && statSync(healPath).mtime < runStart) {
+  const t = statSync(healPath).mtime;
+  const pad = (n) => String(n).padStart(2, '0');
+  archivedHeal = path.join(dir, `heal-proposal.${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}-${pad(t.getHours())}${pad(t.getMinutes())}.md`);
+  renameSync(healPath, archivedHeal);
+}
+
 // ---- Human summary (the runner relays this back to the user) ----
 console.log(`\n══ GATE: ${decision} ${icon} — ${host} ══`);
+if (staleMcp) console.log(`⚠️ mcp-results.json is older than this run — its ${staleMcp} case(s) count as not verified. Re-run the MCP cases.`);
 console.log(`Test cases: ${passed}/${total} passed (${failed} failed, ${skipped} skipped)  ·  P0 ${fmtRate(P0)} · P1 ${fmtRate(P1)} · P2 ${fmtRate(P2)} · P3 ${fmtRate(P3)}`);
 if (fails.length) {
   console.log('Failed:');
@@ -208,6 +243,8 @@ if (skips.length) {
   for (const r of skips) console.log(`  ⏭️ ${r.tc} [${r.prio}] (${r.tool}) ${cleanTitle(r.title)}${r.note ? ` — ${r.note}` : ''}`);
 }
 console.log(`Report : ${OUT}`);
+if (planUpdated) console.log(`Plan   : Status column updated in ${planPath}`);
+if (archivedHeal) console.log(`Heal   : previous proposal archived as ${archivedHeal}`);
 console.log(`HTML   : npx playwright show-report ${path.join(dir, 'html-report')}`);
 // Non-zero exit so CI / the orchestrator can block: 1 = real failure, 2 = unverified.
 process.exit(decision === 'FAIL' ? 1 : decision === 'BLOCKED' ? 2 : 0);

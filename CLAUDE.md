@@ -5,8 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this repo is
 
 `web-test-agent` is not an application — it is a **skill-driven E2E testing workflow**. The
-"code" is four project-local Claude skills under `.claude/skills/` plus three Node scripts
-they drive. It tests *other* websites black-box, from nothing but a URL. There is no source
+"code" is four project-local Claude skills under `.claude/skills/` plus the Node scripts
+they drive (`explore.mjs`, `crawl.mjs`, `coverage.mjs`, `report.mjs`) and a small shared `test-designer/lib/`. It tests *other* websites black-box, from nothing but a URL. There is no source
 code of the target under test here.
 
 ## Commands
@@ -17,6 +17,10 @@ npm install && npx playwright install chromium     # one-time setup
 # 1 DESIGN — explore a live site, write evidence into artifacts/<host>/
 node .claude/skills/test-designer/explore.mjs https://example.com
 node .claude/skills/test-designer/explore.mjs https://example.com --steps steps.json
+node .claude/skills/test-designer/crawl.mjs https://example.com   # multi-page, multi-role -> crawl/site-map.md
+node .claude/skills/test-designer/coverage.mjs https://example.com  # plan vs exploration -> coverage.md; exit 1 = gaps
+
+npm run test:unit                                  # node --test for the skill scripts (no target site needed)
 
 # 3 GENERATE — no command; the agent authors artifacts/<host>/tests/*.spec.mjs
 
@@ -49,8 +53,9 @@ to the next. `.claude/skills/web-test/SKILL.md` is the map, `checklist.md` the e
 3. **script-generator** — reads the TC table, emits one `test()` per `Tool=PW` row.
 4. **test-runner** — runs the specs, *and* drives `Tool=MCP` rows itself via chrome-devtools
    MCP, then `report.mjs` merges both into the gate decision.
-5. **self-healer** — only on failure. Diagnoses on the live page, **proposes a diff and waits
-   for approval**; it never auto-edits a spec.
+5. **self-healer** — only on failure. Diagnoses on the live page, **explains each fix in plain
+   language (never a diff — the reader is a tester) and waits for approval**; it never
+   auto-edits a spec.
 
 ### The test-plan table is the contract
 
@@ -71,7 +76,7 @@ mix both. Use `MCP` for heavy dynamic DOM, canvas/drag, or anything needing live
 
 `BASE_URL` is the single knob. Its host, sanitized with `replace(/[^a-z0-9.-]/gi, '_')`, names
 the per-domain bundle `artifacts/<host>/` — so `localhost:3000` maps to `artifacts/localhost_3000/`.
-That same sanitization is duplicated in [explore.mjs](.claude/skills/test-designer/explore.mjs),
+That same sanitization is duplicated in [lib/bundle.mjs](.claude/skills/test-designer/lib/bundle.mjs) (used by explore and crawl),
 [playwright.config.mjs](.claude/skills/test-runner/playwright.config.mjs), and
 [report.mjs](.claude/skills/test-runner/report.mjs) — if you change one, change all three or
 the phases will write and read different folders. `WEBTEST_HOST` overrides the derived host.
@@ -109,11 +114,18 @@ in the denominator. `WAIVED` is a human override only.
   It still captures what loaded and logs the nav error — switch such sites to chrome-devtools MCP.
 - An empty button label in the exploration outline means an icon-only button; target its
   `aria-label`.
-- `report.mjs` works from `mcp-results.json` alone when a plan has no `PW` rows.
+- `report.mjs` works from `mcp-results.json` alone when a plan has no `PW` rows. With both, an
+  `mcp-results.json` older than the Playwright run counts as skipped — run MCP cases after
+  Playwright. It also rewrites the plan's Status column and archives an old `heal-proposal.md`.
+- Re-running on an existing `artifacts/<host>/` never starts over: `test-plan.md` and
+  `tests/*.spec.mjs` are updated in place, never replaced by their templates.
 - chrome-devtools MCP is configured in `.mcp.json` (the leading dot matters — Claude Code only
-  reads project-scoped servers from `.mcp.json`, and a server only loads at session start);
-  if it isn't connected, run the `PW` cases,
-  report the `MCP` ones as skipped, and say so explicitly. It also passes
+  reads project-scoped servers from `.mcp.json`, and a server only loads at session start). A
+  new machine shows it as "Pending approval" until it is approved once, or pre-approved with
+  `enabledMcpjsonServers` + an `mcp__chrome-devtools` allow rule in `.claude/settings.local.json`;
+  if it isn't connected, drive the `MCP` cases with a scratch Playwright script (fake media
+  flags for microphone/screen cases) rather than skipping them; `Tool=MCP` cases never wait for
+  a confirmation. It also passes
   `--chrome-arg=--use-fake-ui-for-media-stream` and
   `--chrome-arg=--auto-select-desktop-capture-source=Entire screen` so the native screen-share
   picker is answered automatically.
@@ -123,3 +135,10 @@ in the denominator. `WAIVED` is a human override only.
   `.claude/skills/test-runner/resources/knowledge/media-capture-cases.md`.
 - An MCP case that writes real data on staging must be cleaned up by the agent right after the
   verdict is recorded — nothing enforces it the way a Playwright fixture would.
+- `crawl.mjs` is read-only by design: it follows links only, skips URLs whose path or query
+  contains logout/delete/export-style words, and aborts such requests made by pages
+  themselves. Routes found in the SPA's JS bundle go through the same filter (plus `live` and
+  `callback`). It cannot intercept a server-side redirect to such a URL, so keep `--exclude`
+  for known dangerous paths. `artifacts/<host>/.auth/<role>.json` holds live session tokens.
+- `.env.<host>` then `.env` are loaded by `crawl.mjs` and `playwright.config.mjs` (shell wins);
+  `explore.mjs` reads no credentials.
