@@ -45,6 +45,12 @@ test('exportable leaves out fixed bugs and bugs that already have a Jira key', (
   assert.deepEqual(exportable(parseBugReport(FIXTURE)).map((b) => b.id), ['BUG-001']);
 });
 
+test('a horizontal rule after the last bug is not part of its last field', () => {
+  const md = '## BUG-001: A\n**Thực tế:** broken\n**Bằng chứng:** `bugs/BUG-001/screenshot.png`\n\n---\n\n## Chờ xác nhận\n';
+  assert.equal(parseBugReport(md)[0].fields['Bằng chứng'], '`bugs/BUG-001/screenshot.png`');
+  assert.equal(parseBugReport(md.replace(/\n/g, '\r\n'))[0].fields['Bằng chứng'], '`bugs/BUG-001/screenshot.png`');
+});
+
 test('a dash in the Jira field means no key yet; anything else that is not a key is an error', () => {
   const withDash = parseBugReport(FIXTURE.replace('- **Jira:**\n\n**Điều kiện trước:**', '- **Jira:** —\n\n**Điều kiện trước:**'));
   assert.deepEqual(exportable(withDash).map((b) => b.id), ['BUG-001']);

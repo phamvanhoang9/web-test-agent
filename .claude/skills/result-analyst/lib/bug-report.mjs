@@ -15,8 +15,9 @@ const FIELD = new RegExp(`\\*\\*(${FIELDS.join('|')}):\\*\\*`, 'gu');
 const REQUIRED = ['Các bước tái hiện', 'Kỳ vọng', 'Thực tế'];
 const DESCRIPTION = ['Mức độ', 'TC', 'REQ', 'Điều kiện trước', 'Các bước tái hiện', 'Kỳ vọng', 'Thực tế', 'Bằng chứng', 'Lần đầu phát hiện'];
 
-// A value ends where the next field starts; drop the " · " or the "- " bullet left before it.
-const clean = (raw) => raw.trim().replace(/(\s*·|\n\s*-)+$/u, '').trim();
+// A value ends where the next field starts; drop the " · ", the "- " bullet or a "---" rule
+// left before it.
+const clean = (raw) => raw.trim().replace(/(\s*·|\n\s*-{1,3})+$/u, '').trim();
 const canonical = (value, allowed) => allowed.find((a) => a.toLowerCase() === (value ?? '').trim().toLowerCase());
 const ids = (value) => (value ?? '').split(/[,\s]+/).filter((v) => /^(TC|REQ)-\d+$/.test(v));
 // The Jira field holds a ticket key once the bug is imported; empty or a dash means not yet.
