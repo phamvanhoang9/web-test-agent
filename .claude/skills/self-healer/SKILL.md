@@ -1,10 +1,11 @@
 ---
 name: self-healer
-description: Diagnose failing Playwright tests on the live page and propose fixes for approval. Use when web tests fail, are flaky, or need self-healing/repair. Uses chrome-devtools MCP to inspect the real DOM/console/network. Phase 5 of the web-test workflow.
+description: Diagnose failing Playwright tests on the live page and propose fixes for approval. Use when web tests fail, are flaky, or need self-healing/repair. Uses chrome-devtools MCP to inspect the real DOM/console/network. Part of step 3 (execute) of the web-test workflow, on failure.
 ---
 
-Repair failing web tests. Phase 5 of the `web-test` workflow, triggered when
-test-runner reports failures. **Diagnoses on the live page, then proposes a fix and
+Repair failing web tests. Part of step 3 (execute) of the `web-test` workflow, triggered when
+test-runner reports failures. Its proposal is what lets gate G3 pass: every failed TC must be
+classified in it. **Diagnoses on the live page, then proposes a fix and
 waits for your approval — it never auto-applies changes.**
 
 Run from the project root. Work per failing case from `artifacts/<host>/quality-gate.md`.
@@ -45,7 +46,10 @@ proposal in the user's language, in plain words, and save the same content to
 `artifacts/<host>/heal-proposal.md` so it can be shared.
 
 1. **Real app bugs** first — one row each: TC, what the user does, what should happen, what
-   happens instead, evidence (screenshot path, HTTP status). These tests stay red.
+   happens instead, evidence (screenshot path, HTTP status), and the cause in one sentence
+   (result-analyst groups TCs with the same cause into one bug). These tests stay red.
+   **Every failed TC of the latest run must appear in `heal-proposal.md`** — `gate.mjs`
+   counts the missing ones as unclassified, and G3 cannot pass while any remain.
 2. **Test fixes** — one row each: TC, what went wrong in plain words ("the Upload button opens
    a window first; the test expected a file picker"), and what the test will do instead.
 3. **Passed, but wrong** — a test that passed for the wrong reason is worse than a failure;
@@ -54,6 +58,9 @@ proposal in the user's language, in plain words, and save the same content to
    edit the specs, re-run, and loop until the remaining failures are all real bugs.
 
 Show code only if the user asks for it.
+
+Write the proposal after the last run of the heal loop: `report.mjs` archives a proposal older
+than the run, and only a proposal written after the latest run classifies its failures.
 
 ## Gotcha
 - chrome-devtools MCP must be connected for live inspection. If absent, diagnose from the

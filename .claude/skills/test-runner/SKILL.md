@@ -1,13 +1,20 @@
 ---
 name: test-runner
-description: Run web tests (Playwright specs + chrome-devtools-MCP cases), merge results into a quality gate, and report pass/fail back to the user. Use when asked to run tests, execute a test plan, check the quality gate, or get a pass/fail report. Phase 4 of the web-test workflow.
+description: Run web tests (Playwright specs + chrome-devtools-MCP cases), merge results into a quality gate, and report pass/fail back to the user. Use when asked to run tests, execute a test plan, check the quality gate, or get a pass/fail report. Step 3 (execute) of the web-test workflow; the tester approves the quality gate (gate G3).
 ---
 
-Execute a site's test plan and decide the **quality gate**. Phase 4 of the `web-test`
-workflow. Runs both execution mechanisms, merges them, and **reports back to the user**.
-Owns `playwright.config.mjs` + `report.mjs`.
+Execute a site's test plan and decide the **quality gate**. Step 3 (execute) of the `web-test`
+workflow. Runs both execution mechanisms, merges them, and **reports back to the user**, who
+approves the result at gate **G3**. Owns `playwright.config.mjs` + `report.mjs`.
 
 Run from the project root. `BASE_URL` sets the target and resolves `artifacts/<host>/`.
+
+## Start
+```bash
+node .claude/skills/web-test/gate.mjs https://brse.ai
+```
+G2 must show ✅: `npm test` and `report.mjs` refuse to run before it (exit 3, naming the gate).
+Run `Tool=MCP` cases only after this check too.
 
 ## Two execution paths (a plan can mix both)
 
@@ -68,9 +75,18 @@ BASE_URL=https://brse.ai node .claude/skills/test-runner/report.mjs
 # (shortcut: BASE_URL=https://brse.ai npm run gate)
 ```
 `report.mjs` merges `results.json` + `mcp-results.json` → writes
-`artifacts/<host>/quality-gate.md` and prints a summary. It also rewrites the **Status** column
-of `test-plan.md` from this run (✅ / ❌ / ⏭️, ⬜ for a case this run did not include), and
-renames a `heal-proposal.md` older than this run to `heal-proposal.<date>-<time>.md`.
+`artifacts/<host>/quality-gate.md` (in Vietnamese, for the tester) and prints a summary. It
+also saves this run as `runs/<runId>.json` (reporting the same run again overwrites it),
+rewrites the **Status** column of `test-plan.md` from this run (✅ / ❌ / ⏭️, ⬜ for a case this
+run did not include), and renames a `heal-proposal.md` older than this run to
+`heal-proposal.<date>-<time>.md`.
+
+`quality-gate.md` reads top-down, from what to look at to detail: the approval line (reset to
+`⬜ Chờ duyệt` on every run), "Việc của bạn trước khi duyệt (G3)", the decision, **what
+changed since the last run** (new failures first, a 5-run history for TCs that changed, and
+"không ổn định" for flaky ones), failed and skipped cases, **requirement coverage** (Đạt /
+Không đạt / Chưa kiểm chứng / Chưa chạy / Không có TC, grouped by REQ status), the
+per-priority table, TC → result, and an appendix with spec locations and the CI YAML.
 
 **Run the MCP cases after Playwright.** `report.mjs` treats `mcp-results.json` written before
 the Playwright run started as left over from an earlier run: those cases count as skipped
@@ -78,6 +94,8 @@ the Playwright run started as left over from an earlier run: those cases count a
 user** — don't just leave the file. Always tell them:
 - decision **PASS / CONCERNS / BLOCKED / FAIL** + the rationale
 - **counts**: total, passed, failed, skipped — and per-priority pass rate (P0/P1/P2/P3)
+- **what changed since the last run** — new failures first
+- the **requirement coverage** line (confirmed passed / provisional held / waiting for answers)
 - the **list of failed cases** (TC id + title + where)
 - the **list of skipped cases** with their `note` — say plainly that these are unverified,
   not broken, and what it would take to verify them
@@ -86,14 +104,23 @@ user** — don't just leave the file. Always tell them:
 Gate rules (`resources/knowledge/quality-gates.md`): P0 = 100% else FAIL; a P0 case that was
 *skipped* (unverified) gives **BLOCKED**, not FAIL; P1 ≥ 95% else CONCERNS; any remaining
 skip drops the decision to CONCERNS; P2/P3 failures informational. Pass rates are computed
-over executed cases only. Exit codes: **1 on FAIL, 2 on BLOCKED**, 0 otherwise — so
-CI/orchestrator can block on either, and tell them apart.
+over executed cases only. Exit codes: **1 on FAIL, 2 on BLOCKED, 3 when G2 is not passed**,
+0 otherwise — so CI/orchestrator can block on each, and tell them apart.
 
 ## On failure
 Hand failing cases to **self-healer** (diagnoses on the live page, explains each fix in
 plain language and waits for approval), then re-run this phase: the whole suite, so a fix
 that breaks another case shows up. Distinguish a real app bug (report it, don't
-"fix" the test) from a flaky/incorrect script (heal it).
+"fix" the test) from a flaky/incorrect script (heal it). Every failed TC must be classified
+by self-healer in `heal-proposal.md` before G3 — `gate.mjs` lists the unclassified ones.
+
+## Gate G3
+The tester approves `quality-gate.md` when the run is trustworthy: every remaining failure is a
+real bug, script faults were fixed and re-run, and the skips are accepted with their reasons.
+Ask for it only when `gate.mjs` shows no unclassified failure. **Only after the tester says
+"duyệt"**, write the approval line `> **Duyệt:** ✅ Đã duyệt — <name> — <YYYY-MM-DD HH:mm>`
+(name from `git config user.name` unless they give another). Then hand over to
+`result-analyst`.
 
 ## Gotchas
 - `report.mjs` needs `BASE_URL` (or a host arg) to know which `artifacts/<host>/` to read.

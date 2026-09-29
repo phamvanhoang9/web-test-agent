@@ -1,16 +1,27 @@
 ---
 name: test-designer
-description: Explore a website and design a risk-based test plan from just a URL. Use when asked to create test cases, a test plan, or explore/QA-scope a web app. Produces artifacts/<host>/test-plan.md with an editable TC table. Phase 1 of the web-test workflow.
+description: Design a risk-based test plan from approved requirements. Use when asked to create test cases or a test plan for a web app. Reads artifacts/<host>/requirements.md (gate G1 must be passed) and produces artifacts/<host>/test-plan.md with an editable TC table linked to requirements, for the tester to approve (gate G2). Step 2 of the web-test workflow.
 ---
 
-Turn a URL into a reviewable, risk-based **test plan**. Phase 1 of the `web-test`
-workflow. Output: `artifacts/<host>/test-plan.md` — a table the user can edit, that
-script-generator and test-runner consume downstream.
+Turn approved requirements into a reviewable, risk-based **test plan**. Step 2 of the `web-test`
+workflow. Input: `artifacts/<host>/requirements.md` approved at gate **G1**, plus the exploration
+evidence of step 1. Output: `artifacts/<host>/test-plan.md` — a table the tester edits and
+approves (gate **G2**), that script-generator and test-runner consume downstream.
 
 Run from the project root. `<host>` = the URL's host (e.g. `brse.ai`).
 
+## Start
+```bash
+node .claude/skills/web-test/gate.mjs https://app.example.com
+```
+G1 must show ✅. No `requirements.md`, or not approved → run `requirement-analyst` first.
+The exploration evidence (`exploration.md`, `crawl/site-map.md`, `crawl/pages/*`) comes from
+step 1; explore again only when a REQ lacks evidence (same commands, see requirement-analyst).
+
 ## What to achieve
-1. **Explore the live site** to learn what actually exists (don't guess test cases).
+1. **Cover every requirement.** Each REQ `Đã xác nhận` or `Chấp nhận tạm` gets at least one
+   test case, or a line in "không test (và lý do)". `Cần hỏi` REQs get no test case: list them
+   under "Requirement chờ trả lời" — an expectation built on a guess tests nothing.
 2. **Cover everything exploration found.** Every route and every labelled field, button and
    link gets a test case, or a line in the plan's "không test (và lý do)" section saying why
    not. Risk (probability × impact) sets each case's **priority**, not whether it exists — a
@@ -19,108 +30,58 @@ Run from the project root. `<host>` = the URL's host (e.g. `brse.ai`).
    chrome-devtools MCP (`MCP`) for cases Playwright handles poorly (heavy dynamic DOM,
    canvas/drag, things that need live inspection).
 
-## Explore — three ways, by difficulty
-
-**Default — Playwright headless** (fast, captures evidence to `artifacts/<host>/`):
-```bash
-node .claude/skills/test-designer/explore.mjs https://brse.ai
-```
-Writes `exploration.md` (redirects, status, console errors, failed requests, outline
-of every field/button/link), `screenshot.png` (**open and look**), `console.json`,
-`network.json`. Reach a page behind a click/login with `--steps steps.json` (array of
-`{fill|click|waitFor|goto}`).
-
-**Large site, or most of it behind a login — crawl first:**
-```bash
-node .claude/skills/test-designer/crawl.mjs https://app.example.com
-```
-Logs in as each role in `WEBTEST_ROLES` (credentials `TEST_<ROLE>_EMAIL` /
-`TEST_<ROLE>_PASSWORD`, or `TEST_EMAIL` / `TEST_PASSWORD` for the default role — from the
-shell, `.env.<host>`, then `.env`; login page `WEBTEST_LOGIN_PATH`, default `/login`),
-follows same-origin links, `sitemap.xml` and the routes declared in the SPA's JS bundle
-(React Router / Vue Router / Angular configs), groups URLs into route templates
-(`/orders/:id`), and writes `artifacts/<host>/crawl/site-map.md`. Read it before anything else:
-- **Warnings at the top** mean coverage is incomplete (page or time limit, rate limiting, a
-  session that kept expiring). Say so in the plan.
-- **Templates / Files** are the feature areas; `URLs seen` shows how big each is. Open
-  `crawl/pages/<...>/exploration.md` (and its screenshot) only for templates you judge risky.
-- **Access matrix** rows where roles differ are authorization cases (P0/P1). A `[file]` row
-  that differs is a data-exposure risk (P0); also propose an ID-swap (IDOR) case — the crawler
-  never tries other IDs. A cell reading `redirected → /home` means the page answered but the
-  app (often the SPA itself, after an HTTP 200) sent that role elsewhere: the UI refuses it.
-  Pair it with a case that calls the page's API directly — a UI guard proves nothing about
-  the server.
-- **Routes from JS bundle** lists routes no link points to — pages the UI only reaches through
-  buttons. `opened` ones are crawled like links; `unsafe` and `no-id` (a `:param` no crawled
-  page could fill) ones are not — cover them with chrome-devtools MCP if they matter.
-- **Skipped URLs** under Warnings were never opened because they look state-changing (logout,
-  delete, export...). If one is safe and matters, rerun with `--allow <regex>`.
-
-It only follows links and never clicks or submits, which makes it fit for production — with
-the redirect caveat under Gotchas. Limits:
-`--max-pages` 200 per role, `--max-depth` 5, `--max-minutes` 15, `--delay-ms` 250,
-`--samples` 3 per template.
-
-**When that's not enough — chrome-devtools MCP** (interactive, for auth-gated / heavy
-SPA / dynamic content): drive the real browser to understand the flow before writing
-cases — `mcp__chrome-devtools__navigate_page`, `take_snapshot`, `click`, `fill`,
-`list_console_messages`, `list_network_requests`. Use what you learn to fill the plan,
-and mark those cases `Tool=MCP`.
-
-**Then look behind the clicks.** The crawler never clicks, so dialogs, menus and panels are
-not in its outlines. Open each one (Start/Create buttons, user menu, Delete, Share, Feedback,
-Edit...) and **cancel** it — never submit — to learn its fields and validation messages. A
-throwaway Playwright script in your scratchpad, or chrome-devtools MCP, both work.
+Access-matrix rows in `crawl/site-map.md` where roles differ are authorization cases (P0/P1).
+A `[file]` row that differs is a data-exposure risk (P0); also propose an ID-swap (IDOR) case —
+the crawler never tries other IDs. A UI redirect proves nothing about the server: pair it with a
+case that calls the page's API directly.
 
 ## Write the plan
 **If `artifacts/<host>/test-plan.md` already exists, update it — never copy the template over
 it.** It is a plan the user approved: keep every row and its TC id, add new cases with new ids
 after the highest one, and move a feature that disappeared into "không test (và lý do)" rather
-than deleting its row. Then rerun `coverage.mjs` and send the changed rows back for review.
+than deleting its row. Any content change resets the approval line to `⬜ Chờ duyệt`. Then
+rerun `coverage.mjs` and send the changed rows back for review.
 
-Only for a host with no plan yet, copy the template and fill it from the exploration:
+Only for a host with no plan yet, copy the template and fill it:
 ```bash
-mkdir -p artifacts/<host>
 cp -n .claude/skills/test-designer/templates/test-cases.template.md artifacts/<host>/test-plan.md
 ```
 - Score risks (probability × impact → P0–P3). Background: `resources/knowledge/risk-scoring.md`.
-- Fill the **`## Test cases` table**: `TC | P | Tool | Mô tả | Các bước | Kỳ vọng | Status`.
+- Fill the **`## Test cases` table**: `TC | REQ | P | Tool | Mô tả | Các bước | Kỳ vọng | Status`.
   Multi-step "Các bước" separated by `;`. Choose `PW` or `MCP` per row.
+- Fill the **REQ** column (`REQ-001, REQ-002`; `—` for technical checks such as console errors,
+  broken links, a11y).
+- Each LUỒNG in `requirements.md` gets at least one TC that walks the whole flow.
 - Push each check to the lowest level that proves it (`resources/knowledge/test-levels.md`).
 - Cover the categories in the coverage checklist; if you skip one, say why.
 - Write a control's **label as the page shows it** ("Search by keyword...", "Export DOCX") in
   "Các bước" or "Kỳ vọng" — the coverage check matches on it. Routes are written as paths
   (`/meetings/<id>` covers `/meetings/:id`).
+- Fill "Việc của bạn trước khi duyệt" and leave the approval line at `⬜ Chờ duyệt`.
 
 ## Check coverage (required before hand-off)
 ```bash
 node .claude/skills/test-designer/coverage.mjs https://app.example.com
 ```
-Compares the plan against `exploration.md`, `crawl/site-map.json` and every
-`crawl/pages/*/exploration.md`, and writes `artifacts/<host>/coverage.md`. It exits **1** while
-any route or labelled control is in neither a TC row nor the "không test" section — add the
-case, or the reason, and rerun until it exits 0. Icon-only controls cannot be matched by name;
-they are listed under "Unlabeled controls" for you to check by hand. The check only knows what
-exploration recorded: what sits behind a click is still yours to find.
+Compares the plan against `requirements.md`, `exploration.md`, `crawl/site-map.json` and every
+`crawl/pages/*/exploration.md`, and writes `artifacts/<host>/coverage.md` (with a REQ → TC
+matrix). It exits **1** while any route, labelled control, or confirmed/provisional REQ is in
+neither a TC row nor the "không test" section, or when the plan names a REQ that does not exist —
+add the case, or the reason, and rerun until it exits 0. Exit **3** = G1 not passed.
+Icon-only controls cannot be matched by name; they are listed under "Unlabeled controls" for you
+to check by hand. The check only knows what exploration recorded: what sits behind a click is
+still yours to find.
 
 Worked example: `examples/brse.ai.plan.md`.
 
-## Hand off
-Once `coverage.mjs` exits 0, tell the user the plan is ready at `artifacts/<host>/test-plan.md` and ask them to
-review/edit the table (human gate) before script-generator runs.
+## Hand off (G2)
+Once `coverage.mjs` exits 0, tell the tester in plain Vietnamese: how many cases per priority,
+the REQs waiting for an answer, and the path of `test-plan.md`. Ask them to review and edit the
+table, then say "duyệt". **Only after they say so**, write the approval line
+`> **Duyệt:** ✅ Đã duyệt — <name> — <YYYY-MM-DD HH:mm>` (name from `git config user.name`
+unless they give another). Then hand over to `script-generator`.
 
 ## Gotchas
-- `explore.mjs` waits for `networkidle`; websocket/long-poll sites may time out (30s) —
-  it still captures what loaded and logs the nav error. Switch to chrome-devtools MCP for those.
-- Empty button label in the outline = icon-only button; identify by `aria-label`, not text.
 - Note staging vs production in the plan; data-mutating cases belong on staging.
-- `crawl.mjs` login fails with `field-not-found`: the form is not at `/login` — set
-  `WEBTEST_LOGIN_PATH`. SSO and MFA are not supported; use chrome-devtools MCP for those.
-- The crawler aborts requests a page itself makes to a state-changing URL, but it cannot
-  intercept a server-side redirect to one — whether the redirect answers a link, an image or
-  a fetch. Keep `--exclude` for known dangerous paths.
-- Bundle route discovery reads only the start page's own `<script>` / `modulepreload` files
-  (up to 20). Next.js route manifests are not read, relative child routes are skipped, and a
-  JS-only app with no router config yields nothing. Turn it off with `--no-bundle-routes`.
-- `artifacts/<host>/.auth/*.json` holds live session tokens. It is gitignored with the rest of
-  `artifacts/`; never copy it elsewhere.
+- A plan approved before `requirements.md` was last approved does not pass G2 — `gate.mjs`
+  says so; send it back to the tester.
