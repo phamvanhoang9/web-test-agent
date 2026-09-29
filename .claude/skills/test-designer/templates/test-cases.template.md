@@ -1,6 +1,12 @@
 # Test plan — <SITE>
+> **Duyệt:** ⬜ Chờ duyệt
 
-> Generated from exploration of `<URL>` on <DATE>.
+> **Việc của bạn trước khi duyệt (G2)**
+> - <vd: Kiểm P0/P1 có đúng là những gì quan trọng nhất>
+> - <vd: Kiểm "Kỳ vọng" của 5 TC gắn với REQ "Chấp nhận tạm">
+> - <vd: 3 REQ "Cần hỏi" chưa có TC — xem mục "Requirement chờ trả lời">
+
+> Thiết kế từ `requirements.md` (duyệt <ngày>) và khảo sát `<URL>` ngày <DATE>.
 > Method: black-box, risk-based (BMAD testarch style). Status: ⬜ chưa chạy · ✅ pass · ❌ fail · ⏭️ skip
 
 ## Phạm vi & môi trường
@@ -15,6 +21,14 @@
 | Route / chức năng | Lý do không test | Cần gì để test |
 |---|---|---|
 | <vd: `/teams/config`> | <vd: chỉ chạy trong Microsoft Teams> | <vd: tenant M365 + app đã cài> |
+
+## Requirement chờ trả lời (chưa có TC)
+> REQ đang "Cần hỏi" trong `requirements.md`. Có trả lời → cập nhật requirements.md, duyệt lại
+> G1, rồi thêm TC ở đây.
+
+| REQ | Câu hỏi đang chờ |
+|---|---|
+| <vd: REQ-004> | <vd: Ngưỡng miễn phí ship?> |
 
 ## Risk assessment (probability × impact = score)
 Score ≥6 ⇒ P0 · 3–4 ⇒ P1 · 1–2 ⇒ P2/P3. Category: SEC/PERF/DATA/BUS/TECH/OPS.
@@ -37,18 +51,21 @@ Score ≥6 ⇒ P0 · 3–4 ⇒ P1 · 1–2 ⇒ P2/P3. Category: SEC/PERF/DATA/BU
 > - Cột **P**: P0–P3 (lấy từ Risk ở trên). script-generator mã hoá vào tiêu đề test
 >   `test('TC-001 [P0] ...')` để chấm gate.
 > - **Các bước** nhiều bước: ngăn bằng `;` (vd `1. Mở /; 2. Bấm Sign in`).
+> - Cột **REQ**: requirement mà TC kiểm (`REQ-001, REQ-002` nếu nhiều). `—` cho kiểm tra kỹ
+>   thuật không gắn REQ (lỗi console, link hỏng, a11y). Mọi REQ "Đã xác nhận"/"Chấp nhận tạm"
+>   phải có TC hoặc nằm ở mục "không test" — `coverage.mjs` kiểm.
 
-| TC | P | Tool | Mô tả | Các bước | Kỳ vọng | Status |
-|------|----|------|----------------|------------------|------------------------|--------|
-| TC-001 | P0 | PW | <mô tả ngắn> | 1. <…>; 2. <…> | <kết quả kiểm chứng được> | ⬜ |
-| TC-002 | P1 | PW | <…> | <…> | <…> | ⬜ |
-| TC-010 | P1 | MCP | <case DOM động> | 1. <…> | <…> | ⬜ |
+| TC | REQ | P | Tool | Mô tả | Các bước | Kỳ vọng | Status |
+|------|------|----|------|----------------|------------------|------------------------|--------|
+| TC-001 | REQ-001 | P0 | PW | <mô tả ngắn> | 1. <…>; 2. <…> | <kết quả kiểm chứng được> | ⬜ |
+| TC-002 | REQ-002, REQ-003 | P1 | PW | <…> | <…> | <…> | ⬜ |
+| TC-010 | — | P1 | MCP | <case DOM động> | 1. <…> | <…> | ⬜ |
 
 ## Độ phủ (coverage checklist)
 - [ ] Authentication (login đúng/sai/trống, logout, session)
 - [ ] Authorization (truy cập URL cấm)
 - [ ] Form validation (required, định dạng, biên)
-- [ ] Business flow chính
+- [ ] Business flow chính (mỗi LUỒNG trong requirements.md có ít nhất một TC đi hết luồng)
 - [ ] Negative & edge cases
 - [ ] Responsive (mobile/tablet/desktop)
 - [ ] Performance (Lighthouse / Core Web Vitals)
@@ -58,4 +75,4 @@ Score ≥6 ⇒ P0 · 3–4 ⇒ P1 · 1–2 ⇒ P2/P3. Category: SEC/PERF/DATA/BU
 ## Quality gate (ngưỡng quyết định)
 - P0 pass rate **100%** (không ngoại lệ) · P1 **≥95%** · P2/P3 informational
 - Không có lỗi bảo mật (SEC) mở · Không rủi ro score ≥6 chưa giảm thiểu
-- Quyết định: **PASS** / **CONCERNS** / **FAIL** — sinh tự động bằng `report.mjs`
+- Quyết định: **PASS** / **CONCERNS** / **BLOCKED** / **FAIL** — sinh tự động bằng `report.mjs`
