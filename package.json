@@ -11,7 +11,8 @@
     "test": "playwright test --config .claude/skills/test-runner/playwright.config.mjs",
     "test:unit": "node --test \".claude/skills/**/*.test.mjs\"",
     "gate": "node .claude/skills/test-runner/report.mjs",
-    "status": "node .claude/skills/web-test/gate.mjs"
+    "status": "node .claude/skills/web-test/gate.mjs",
+    "bugs": "node .claude/skills/result-analyst/bugs.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0"
