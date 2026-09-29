@@ -1,6 +1,9 @@
-// coverage.mjs — check that a test plan accounts for everything exploration found: every
-// route in the site map and every field, button and link in the page outlines must appear in
-// a TC row of the plan, or in its "không test (và lý do)" section. Pure: no browser, no disk.
+// coverage.mjs — check that a test plan accounts for everything exploration found and every
+// requirement that is confirmed or provisional: each route in the site map, each field, button
+// and link in the page outlines, and each such REQ must appear in a TC row of the plan, or in
+// its "không test (và lý do)" section. Pure: no browser, no disk.
+
+import { STATUS_LABEL } from '../../web-test/lib/requirements.mjs';
 
 const PARAM = "[^\\s/|;,)`'\"]+";
 const SEGMENT_END = "(?=$|[\\s|;,)`'\"?#]|\\.(?:\\s|$))";
@@ -75,11 +78,13 @@ export function parsePlan(md) {
 }
 
 /**
- * Every route and control, each with the TCs that mention it and whether the plan lists it
- * as not tested. `gaps` is what neither covers. A link is also covered when the route it
- * points to is. Controls without a label cannot be matched and are listed in `unlabeled`.
+ * Every route, control and requirement, each with the TCs that mention it and whether the plan
+ * lists it as not tested. `gaps` is what neither covers. A link is also covered when the route
+ * it points to is. Controls without a label cannot be matched and are listed in `unlabeled`.
+ * Requirements awaiting an answer (`question`) are listed but never gaps; dropped ones are
+ * skipped, and `droppedInPlan` names those the plan still mentions.
  */
-export function checkCoverage({ routes, outlines, plan, origin }) {
+export function checkCoverage({ routes, outlines, plan, origin, requirements = [] }) {
   const stripOrigin = (text) => normalize(origin ? text.replaceAll(origin, '') : text);
   const rows = plan.rows.map((row) => ({ tc: row.tc, text: stripOrigin(row.text) }));
   const notTestedText = stripOrigin(plan.notTested);
@@ -126,11 +131,33 @@ export function checkCoverage({ routes, outlines, plan, origin }) {
     return result;
   });
 
+  const requirementResults = requirements
+    .filter((r) => r.status !== 'dropped')
+    .map((r) => {
+      const pattern = new RegExp(`\\b${r.id}\\b`, 'i');
+      return { ...r, ...verdict((text) => pattern.test(text)) };
+    });
+  // Row text is lower-cased by stripOrigin, so upper-case it back before reading REQ ids.
+  const referenced = [...new Set(rows.flatMap((row) => row.text.toUpperCase().match(/\bREQ-\d+\b/g) ?? []))].sort();
+  const known = new Set(requirements.map((r) => r.id));
+  const dropped = new Set(requirements.filter((r) => r.status === 'dropped').map((r) => r.id));
+  const requirementGaps = requirementResults
+    .filter((r) => r.status !== 'question' && !r.covered)
+    .map((r) => ({ kind: 'requirement', label: `${r.id} ${r.description}`.trim(), pages: [] }));
+  const unknownGaps = referenced.filter((id) => !known.has(id)).map((id) => ({ kind: 'unknown-req', label: id, pages: [] }));
+
   return {
     routes: routeResults,
     controls: controlResults,
+    requirements: requirementResults,
+    droppedInPlan: referenced.filter((id) => dropped.has(id)),
     unlabeled: unlabeledControls,
-    gaps: [...routeResults.filter((r) => !r.covered), ...controlResults.filter((c) => !c.covered)],
+    gaps: [
+      ...routeResults.filter((r) => !r.covered),
+      ...controlResults.filter((c) => !c.covered),
+      ...requirementGaps,
+      ...unknownGaps,
+    ],
   };
 }
 
@@ -145,11 +172,16 @@ export function renderCoverage(result, host) {
     : `| ${gap.kind} | ${cell(gap.label)} | ${gap.pages.join(', ')} |`));
   return [
     `# Coverage — ${host}`,
-    `- **Routes covered:** ${count(result.routes)}\n- **Controls covered:** ${count(result.controls)}\n- **Gaps:** ${result.gaps.length}`,
+    `- **Routes covered:** ${count(result.routes)}\n- **Controls covered:** ${count(result.controls)}\n- **Requirements covered:** ${count(result.requirements.filter((r) => r.status !== 'question'))}\n- **Gaps:** ${result.gaps.length}`,
     '## Gaps',
     gapRows.length
       ? ['Add a TC that mentions each item, or list it with a reason under "không test".', '| Kind | Item | Pages |', '| --- | --- | --- |', ...gapRows].join('\n')
       : '_None — every route and control maps to a TC or a stated reason._',
+    ...(result.requirements.length
+      ? ['## Requirements → TC', ['| REQ | Trạng thái | Mô tả | TC |', '| --- | --- | --- | --- |',
+        ...result.requirements.map((r) => `| ${r.id} | ${STATUS_LABEL[r.status]} | ${cell(r.description)} | ${r.status === 'question' ? 'chờ trả lời' : coveredBy(r)} |`)].join('\n')]
+      : []),
+    ...(result.droppedInPlan.length ? [`Plan vẫn nhắc tới REQ đã bỏ: ${result.droppedInPlan.join(', ')}.`] : []),
     '## Routes',
     ['| Route | Covered by |', '| --- | --- |', ...result.routes.map((r) => `| ${cell(r.route)} | ${coveredBy(r)} |`)].join('\n'),
     '## Controls',

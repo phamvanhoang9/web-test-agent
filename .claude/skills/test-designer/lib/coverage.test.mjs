@@ -120,6 +120,53 @@ test('renderCoverage puts the gaps first and says when there are none', () => {
   assert.ok(none.includes('_None — every route and control maps to a TC or a stated reason._'));
 });
 
+const REQS = [
+  { id: 'REQ-001', description: 'Tìm theo từ khoá', status: 'confirmed' },
+  { id: 'REQ-002', description: 'Xuất CSV', status: 'provisional' },
+  { id: 'REQ-003', description: 'Phí ship', status: 'question' },
+  { id: 'REQ-004', description: 'In PDF', status: 'dropped' },
+  { id: 'REQ-005', description: 'Xoá hàng loạt', status: 'confirmed' },
+];
+const REQ_PLAN = parsePlan(`## Route không test (và lý do)
+| REQ-002 | cần tài khoản admin |
+
+## Test cases
+| TC | REQ | P | Tool | Mô tả | Các bước | Kỳ vọng | Status |
+|---|---|---|---|---|---|---|---|
+| TC-001 | REQ-001 | P1 | PW | Tìm | 1. Mở /history | Lọc được | ⬜ |
+| TC-002 | REQ-004, REQ-099 | P2 | PW | Cũ | 1. Mở / | Có | ⬜ |
+`);
+
+test('checkCoverage: every confirmed or provisional REQ needs a TC or a stated reason', () => {
+  const result = checkCoverage({ routes: [], outlines: [], plan: REQ_PLAN, origin: ORIGIN, requirements: REQS });
+  const byId = Object.fromEntries(result.requirements.map((r) => [r.id, r]));
+  assert.deepEqual(byId['REQ-001'].tcs, ['TC-001']);
+  assert.equal(byId['REQ-002'].notTested, true);
+  assert.equal(byId['REQ-005'].covered, false);
+  assert.equal('REQ-004' in byId, false, 'a dropped REQ is not checked');
+  assert.deepEqual(result.gaps, [
+    { kind: 'requirement', label: 'REQ-005 Xoá hàng loạt', pages: [] },
+    { kind: 'unknown-req', label: 'REQ-099', pages: [] },
+  ]);
+  assert.deepEqual(result.droppedInPlan, ['REQ-004']);
+});
+
+test('checkCoverage: a REQ awaiting an answer is listed but never a gap', () => {
+  const result = checkCoverage({ routes: [], outlines: [], plan: REQ_PLAN, origin: ORIGIN, requirements: REQS });
+  assert.equal(result.requirements.find((r) => r.id === 'REQ-003').covered, false);
+  assert.ok(!result.gaps.some((g) => g.label.startsWith('REQ-003')));
+});
+
+test('renderCoverage adds the REQ → TC matrix only when there are requirements', () => {
+  const md = renderCoverage(checkCoverage({ routes: [], outlines: [], plan: REQ_PLAN, origin: ORIGIN, requirements: REQS }), 'app.test');
+  assert.ok(md.includes('## Requirements → TC'));
+  assert.ok(md.includes('| REQ-001 | Đã xác nhận | Tìm theo từ khoá | TC-001 |'));
+  assert.ok(md.includes('| REQ-003 | Cần hỏi | Phí ship | chờ trả lời |'));
+  assert.ok(md.includes('| requirement | REQ-005 Xoá hàng loạt |  |'));
+  assert.ok(md.includes('Plan vẫn nhắc tới REQ đã bỏ: REQ-004.'));
+  assert.ok(!renderCoverage(coverage(), 'app.test').includes('## Requirements → TC'));
+});
+
 test('an external URL in the plan does not count as covering the root route', () => {
   const plan = parsePlan('| TC-009 | P3 | PW | Link ngoài | 1. Bấm React Plus (https://reactplus.test/) | Mở tab mới | ⬜ |');
   const result = checkCoverage({ routes: ['/'], outlines: [], plan, origin: ORIGIN });
