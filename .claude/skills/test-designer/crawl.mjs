@@ -30,7 +30,7 @@ import { login, LoginError, missingCredentials } from './lib/auth.mjs';
 import { bundleDir, hostOf, loadEnv } from './lib/bundle.mjs';
 import { capturePage, probeFile, renderExploration } from './lib/capture.mjs';
 import { extractRoutes, instantiate, scriptUrls } from './lib/route-discovery.mjs';
-import { buildSiteMap, renderSiteMap } from './lib/site-map.mjs';
+import { apiDenial, buildSiteMap, renderSiteMap } from './lib/site-map.mjs';
 import { isFileUrl, isUnsafe, normalizeUrl, TemplateIndex } from './lib/url-template.mjs';
 
 const { values: args, positionals } = parseArgs({
@@ -221,6 +221,7 @@ async function visitPage(role, context, url, { probe = false } = {}) {
       status: result.status,
       loginRedirect,
       redirectedTo,
+      apiDenied: apiDenial(result.network, origin),
       skeleton: result.skeleton,
       errors: result.consoleMsgs.filter((m) => m.type !== 'warning'),
       failedRequests: result.network

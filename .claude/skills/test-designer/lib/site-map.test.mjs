@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildSiteMap, classifyAccess, renderSiteMap, skeletonMismatch } from './site-map.mjs';
+import { apiDenial, buildSiteMap, classifyAccess, renderSiteMap, skeletonMismatch } from './site-map.mjs';
 import { TemplateIndex } from './url-template.mjs';
 
 const ORIGIN = 'https://app.test';
@@ -33,6 +33,21 @@ test('classifyAccess', () => {
   assert.equal(classifyAccess({ status: 404, loginRedirect: false }), 'http 404');
   assert.equal(classifyAccess({ status: null, loginRedirect: false }), 'error');
   assert.equal(classifyAccess({ status: 200, loginRedirect: false, redirectedTo: '/home' }), 'redirected → /home');
+  assert.equal(classifyAccess({ status: 200, loginRedirect: false, apiDenied: 404 }), 'API 404',
+    'an SPA page answers 200 while its own API refuses the role');
+});
+
+test('apiDenial: the first 401/403/404 a page\'s own API gave it, ignoring assets and other sites', () => {
+  const req = (url, status, type = 'fetch') => ({ url, status, type, method: 'GET', failed: status >= 400 });
+  const origin = 'https://dev.app.test';
+  assert.equal(apiDenial([req('https://dev.app.test/api/me', 200), req('https://api.dev.app.test/api/meetings/9', 404)], origin), 404,
+    'an API on a sibling subdomain of the same site counts');
+  assert.equal(apiDenial([req('https://dev.app.test/api/admin', 403, 'xhr')], origin), 403);
+  assert.equal(apiDenial([req('https://dev.app.test/logo.png', 404, 'image')], origin), null, 'a missing asset is not a refusal');
+  assert.equal(apiDenial([req('https://tracker.example.org/api/x', 404)], origin), null, 'another site is not this app');
+  assert.equal(apiDenial([req('https://dev.app.test/api/report', 500)], origin), null, 'a server error is not a refusal');
+  assert.equal(apiDenial([req('http://127.0.0.1:4000/api/reports/7', 404)], 'http://127.0.0.1:4000'), 404);
+  assert.equal(apiDenial([], origin), null);
 });
 
 test('skeletonMismatch flags samples whose structure differs', () => {

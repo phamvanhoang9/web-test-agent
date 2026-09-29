@@ -87,6 +87,10 @@ describe('crawl as admin and user', () => {
     assert.match(evidence, /\*\*Final URL:\*\* http:\/\/127\.0\.0\.1:\d+\/spa-admin\n/);
   });
 
+  test('an SPA page whose own API refuses a role is "API 404", not "allowed"', () => {
+    assert.deepEqual(map.access['/statements/:id'], { admin: 'allowed', user: 'API 404' });
+  });
+
   test('files: attachment reclassified, ranged fallback, broken file', () => {
     assert.equal(row('/files/get').kind, 'file');
     assert.ok(row('/legacy/report.pdf').visits.every((v) => v.method === 'range'));

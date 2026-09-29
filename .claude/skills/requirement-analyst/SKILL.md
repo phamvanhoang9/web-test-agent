@@ -77,7 +77,10 @@ follows same-origin links, `sitemap.xml` and the routes declared in the SPA's JS
   ("role X cannot open Y"). A `[file]` row that differs is a data-exposure rule. A cell reading
   `redirected → /home` means the page answered but the app (often the SPA itself, after an
   HTTP 200) sent that role elsewhere: the UI refuses it — whether the server does too is for
-  test design to check.
+  test design to check. `API 404` / `API 403` means the page answered 200 but its own API
+  refused that role while it loaded: the server denies the data. An SPA answers 200 for every
+  URL, so `allowed` only means the page and its API calls succeeded — open the page as that
+  role before calling a row a data leak.
 - **Routes from JS bundle** lists routes no link points to — pages the UI only reaches through
   buttons. `opened` ones are crawled like links; `unsafe` and `no-id` (a `:param` no crawled
   page could fill) ones are not — cover them with chrome-devtools MCP if they matter.

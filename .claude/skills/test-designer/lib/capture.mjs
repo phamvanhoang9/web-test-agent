@@ -14,7 +14,7 @@ export function observe(page) {
   page.on('pageerror', (e) => consoleMsgs.push({ type: 'pageerror', text: String(e) }));
   page.on('response', (r) => {
     const s = r.status();
-    network.push({ status: s, method: r.request().method(), url: r.url(), failed: s >= 400 });
+    network.push({ status: s, method: r.request().method(), type: r.request().resourceType(), url: r.url(), failed: s >= 400 });
   });
   return { consoleMsgs, network };
 }

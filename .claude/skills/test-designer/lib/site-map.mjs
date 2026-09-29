@@ -14,8 +14,25 @@ export function classifyAccess(visit) {
   if (visit.redirectedTo) return `redirected → ${visit.redirectedTo}`;
   if (visit.status === 401 || visit.status === 403) return 'denied';
   if (visit.status === null) return 'error';
-  if (visit.status >= 200 && visit.status < 300) return 'allowed';
+  // An SPA answers 200 for every URL; the server's answer is the page's own API call.
+  if (visit.status >= 200 && visit.status < 300) return visit.apiDenied ? `API ${visit.apiDenied}` : 'allowed';
   return `http ${visit.status}`;
+}
+
+// The site of a host: its last two labels (dev.app.test and api.dev.app.test are one site),
+// or the host itself for an IP address. Hosts under a two-label suffix (.co.uk) over-match.
+const siteOf = (hostname) => (/^[\d.]+$|:/.test(hostname) ? hostname : hostname.split('.').slice(-2).join('.'));
+const REFUSALS = new Set([401, 403, 404]);
+
+/**
+ * The first 401/403/404 that a page's own API (a fetch or XHR to the same site) answered while
+ * the page loaded, or null. Assets that 404 and other sites' calls are not refusals.
+ */
+export function apiDenial(network, origin) {
+  const site = siteOf(new URL(origin).hostname);
+  const refusal = network.find((r) => (r.type === 'fetch' || r.type === 'xhr')
+    && REFUSALS.has(r.status) && siteOf(new URL(r.url).hostname) === site);
+  return refusal ? refusal.status : null;
 }
 
 /** True when a template's samples differ in structure enough that it may mix pages. */

@@ -180,5 +180,8 @@ unclassified-failure check read; a TC reported twice keeps its worst result.
   themselves. Routes found in the SPA's JS bundle go through the same filter (plus `live` and
   `callback`). It cannot intercept a server-side redirect to such a URL, so keep `--exclude`
   for known dangerous paths. `artifacts/<host>/.auth/<role>.json` holds live session tokens.
+- An SPA answers HTTP 200 for every URL, so the access matrix also reads the page's own API
+  calls: a fetch/XHR to the same site answering 401/403/404 makes the cell `API <status>`
+  instead of `allowed` (`lib/site-map.mjs` `apiDenial`; "same site" = last two host labels).
 - `.env.<host>` then `.env` are loaded by `crawl.mjs` and `playwright.config.mjs` (shell wins);
   `explore.mjs` reads no credentials.

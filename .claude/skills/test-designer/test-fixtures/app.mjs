@@ -80,7 +80,7 @@ function home(role, { slowFontHome, denyByRedirect }) {
     : '';
   const font = slowFontHome ? '<style>@font-face{font-family:slow;src:url(/never-ends)} body{font-family:slow}</style>' : '';
   return html('Home', `${font}${deniedLinks}<script type="module" src="/assets/app.js"></script><header><nav>
-<a href="/orders">Orders</a> <a href="/products">Products</a> <a href="/broken">Broken</a> <a href="/spa-admin">Console</a> ${adminLinks}
+<a href="/orders">Orders</a> <a href="/products">Products</a> <a href="/broken">Broken</a> <a href="/spa-admin">Console</a> <a href="/statements/7">Statement</a> ${adminLinks}
 <a href="/docs/manual.pdf">Manual</a> <a href="/files/get?id=3">Export file</a>
 <a href="/legacy/report.pdf">Legacy report</a> <a href="/docs/missing.pdf">Missing</a>
 <a href="/logout">Log out</a> <a href="/items/1/delete">Delete item</a> <a href="/reports/export.csv">Export CSV</a>
@@ -186,6 +186,8 @@ export async function startFixture({
     const receipt = /^\/orders\/(\d+)\/receipt$/.exec(pathname);
     const product = /^\/products\/([\w-]+)$/.exec(pathname);
     const invoice = /^\/invoices\/(\d+)\.pdf$/.exec(pathname);
+    const statement = /^\/statements\/(\d+)$/.exec(pathname);
+    const statementApi = /^\/api\/statements\/(\d+)$/.exec(pathname);
     const origin = `http://${req.headers.host}`;
 
     if (pathname === '/login') return send(200, loginForm());
@@ -216,6 +218,16 @@ export async function startFixture({
       const body = role === 'admin' || !requireAuth ? '<main><h1>Console</h1></main>' : "<script>location.replace('/')</script>";
       return send(200, html('Console', body));
     }
+    if (statement) {
+      // An SPA page: 200 for every role; the data comes from an API that refuses non-admins.
+      // The missing image 404s for everyone and must not read as a refusal.
+      return send(200, html(`Statement ${statement[1]}`, `<main><h1 id="t">Loading</h1><img src="/missing.png" alt=""></main>
+<script>fetch('/api/statements/${statement[1]}').then((r) => { document.getElementById('t').textContent = r.ok ? 'Statement' : 'Not found'; })</script>`));
+    }
+    if (statementApi) {
+      return role === 'admin' ? send(200, '{"id":7}', 'application/json') : send(404, '{"error":"not found"}', 'application/json');
+    }
+    if (pathname === '/missing.png') return send(404, 'missing', 'text/plain');
     if (receipt) return send(200, html(`Receipt ${receipt[1]}`, `<main><h1>Receipt ${receipt[1]}</h1></main>`));
     if (pathname === '/assets/app.js') return send(200, APP_BUNDLE, 'text/javascript');
     if (pathname === '/team' || pathname === '/team/members') return send(200, html('Team', '<main><p>Team</p></main>'));
