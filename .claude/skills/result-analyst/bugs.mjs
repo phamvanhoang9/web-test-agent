@@ -37,4 +37,5 @@ if (!selected.length) {
 const out = path.join(dir, 'bugs.csv');
 writeFileSync(out, toJiraCsv(selected, hostOf(url)));
 console.log(`Đã xuất ${selected.length} bug → ${out} (bỏ qua ${bugs.length - selected.length}: đã có Jira key hoặc Đã sửa).`);
-console.log('CSV không mang được file đính kèm: sau khi import, đính kèm ảnh và trace trong bugs/BUG-NNN/ vào từng ticket, rồi điền Jira key vào bug-report.md.');
+console.log('CSV không mang được file đính kèm: sau khi import, đính kèm ảnh trong bugs/BUG-NNN/ vào từng ticket, rồi điền Jira key vào bug-report.md.');
+console.log('Không đính kèm trace.zip: trace ghi lại mật khẩu gõ vào form và token phiên của tài khoản test — chỉ mở trong máy.');

@@ -298,7 +298,7 @@ artifacts/example.com/
 ├── runs/<runId>.json    # one snapshot per run — what the comparison reads
 ├── heal-proposal.md     # the healer's plain-language proposal; archived with a date on the next run
 ├── bug-report.md        # step 4, approved at G4 — bugs, recommendation
-├── bugs/BUG-NNN/        # each bug's screenshot and trace, kept after test-results/ is emptied
+├── bugs/BUG-NNN/        # each bug's screenshot and trace, kept after test-results/ is emptied (attach only the screenshot to Jira: a trace holds the typed test password and tokens)
 ├── bugs.csv             # exported after G4, for Jira
 └── html-report/         # regenerated
 ```

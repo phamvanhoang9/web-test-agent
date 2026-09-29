@@ -35,6 +35,9 @@ approved the quality gate.
    the tester confirms). Record "Lần đầu phát hiện" as the runId of the first run that saw it.
 3. **Save the evidence.** Copy each bug's screenshot and trace (and any MCP screenshot) to
    `artifacts/<host>/bugs/BUG-NNN/`. Playwright empties `test-results/` on every run.
+   A trace records every value typed into the page (the test password included) and the session
+   tokens, so it stays on this machine: list only screenshots in **Bằng chứng**, the field that
+   goes to Jira.
 4. **Steps in the user's words**, never selectors: from the TC's "Các bước" plus self-healer's
    reproduction on the live page.
 5. **Propose Mức độ and Ưu tiên**; the tester adjusts them.
@@ -67,7 +70,8 @@ node .claude/skills/result-analyst/bugs.mjs https://app.example.com
 ```
 
 It exports bugs that are not `Đã sửa` and have no Jira key to `bugs.csv`. Tell the tester where
-it is, that attachments must be added by hand from `bugs/BUG-NNN/`, and to write each Jira key
+it is, that screenshots must be attached by hand from `bugs/BUG-NNN/` (never `trace.zip`: it
+holds the test password and tokens), and to write each Jira key
 into the bug's `**Jira:**` field (or ask you to).
 
 ## Gotchas

@@ -30,4 +30,4 @@
 
 **Kỳ vọng:** <…>
 **Thực tế:** <…>
-**Bằng chứng:** `bugs/BUG-001/screenshot.png`, `bugs/BUG-001/trace.zip`
+**Bằng chứng:** `bugs/BUG-001/screenshot.png`
