@@ -2,8 +2,8 @@
 
 **Black-box end-to-end web testing, driven from nothing but a URL.**
 
-![Playwright](https://img.shields.io/badge/Playwright-1.49-2EAD33?logo=playwright&logoColor=white)
-![Node](https://img.shields.io/badge/Node-%E2%89%A518-339933?logo=node.js&logoColor=white)
+![Playwright](https://img.shields.io/badge/Playwright-%E2%89%A51.49-2EAD33?logo=playwright&logoColor=white)
+![Node](https://img.shields.io/badge/Node-%E2%89%A520.12-339933?logo=node.js&logoColor=white)
 ![MCP](https://img.shields.io/badge/MCP-chrome--devtools-6E56CF)
 ![Agent skills](https://img.shields.io/badge/Claude_Code-skill--driven-D97757)
 
@@ -97,6 +97,8 @@ npm run status -- https://example.com
 node .claude/skills/test-designer/explore.mjs https://example.com
 #     large or login-gated site: crawl it instead (roles and credentials from .env)
 node .claude/skills/test-designer/crawl.mjs https://example.com
+#     options: crawl.mjs --roles admin,user --max-pages 200 --max-minutes 15 --exclude <regex>
+#              explore.mjs --steps steps.json  (click through a flow before capturing)
 
 # 2 · design: the agent writes test-plan.md; every route, control and requirement covered?
 npm run coverage -- https://example.com          # exit 1 = gaps, 3 = G1 not approved
@@ -326,6 +328,40 @@ them; variables set in the shell win. `.env*` is gitignored — credentials neve
 Cross-browser and mobile projects are pre-declared and commented out in
 [`playwright.config.mjs`](.claude/skills/test-runner/playwright.config.mjs) — uncomment to
 widen coverage beyond Chromium.
+
+## Project structure
+
+Nothing test-related lives at the project root except `package.json`; everything is under
+`.claude/skills/`, one folder per skill. The Node scripts sit next to the skill that owns them.
+
+```
+.claude/skills/
+├── web-test/            # orchestrator: SKILL.md, checklist.md
+│   ├── gate.mjs         #   npm run status — the four gates and the next step
+│   └── lib/             #   approval.mjs (the only reader of "Duyệt"), requirements.mjs
+├── requirement-analyst/ # step 1: SKILL.md, requirements template and examples
+├── test-designer/       # step 2: SKILL.md, plan template, examples, resources/knowledge
+│   ├── explore.mjs      #   one page: outline, screenshot, console, network
+│   ├── crawl.mjs        #   whole site, several roles -> crawl/site-map.md
+│   ├── coverage.mjs     #   plan vs requirements and exploration -> coverage.md
+│   └── lib/             #   bundle, capture, auth, site-map, route-discovery, url-template
+├── script-generator/    # step 3: SKILL.md, spec templates, selector-resilience.md
+├── test-runner/         # step 3: SKILL.md, resources/knowledge
+│   ├── playwright.config.mjs
+│   ├── report.mjs       #   npm run gate — merge results into the quality gate
+│   └── lib/             #   history (runs/), req-coverage
+├── self-healer/         # step 3, on failure: SKILL.md, resources/knowledge
+└── result-analyst/      # step 4: SKILL.md, bug-report template
+    ├── bugs.mjs         #   npm run bugs — bugs.csv for Jira
+    └── lib/             #   bug-report parser
+```
+
+Each script has a `*.test.mjs` beside it. `npm run test:unit` runs them all with `node --test`
+and needs no target site. The bundle-name rule (`BASE_URL` → `artifacts/<host>/`) is written
+out in three places — [`bundle.mjs`](.claude/skills/test-designer/lib/bundle.mjs),
+[`playwright.config.mjs`](.claude/skills/test-runner/playwright.config.mjs) and
+[`report.mjs`](.claude/skills/test-runner/report.mjs) — so change all three together, or the
+phases will write and read different folders.
 
 ## Guardrails
 
