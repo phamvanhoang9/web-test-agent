@@ -28,8 +28,9 @@ test('loading the config fails while the test plan is not approved', async () =>
     'requirements.md': `# R\n${approved('2026-09-28 10:00')}\n`,
     'test-plan.md': '# P\n> **Duyệt:** ⬜ Chờ duyệt\n',
   });
-  assert.notEqual(code, 0);
+  assert.equal(code, 3, 'blocked by a gate, not failed');
   assert.match(stderr, /G2 chưa qua: test-plan\.md chờ duyệt/);
+  assert.doesNotMatch(stderr, /\n\s+at /, 'no stack trace for the tester');
 });
 
 test('the config loads once G1 and G2 are approved in order', async () => {

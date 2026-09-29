@@ -113,6 +113,23 @@ test('requireGate returns the status when passed and throws a GateError otherwis
   const dir = bundle({ 'requirements.md': doc('R', approved('2026-09-28 10:00')), 'test-plan.md': doc('P', PENDING_LINE) });
   assert.equal(requireGate(dir, 'G1').state, 'approved');
   assert.throws(() => requireGate(dir, 'G2'), (error) => error instanceof GateError
-    && /^G2 chưa qua: test-plan\.md chờ duyệt\./.test(error.message));
-  assert.throws(() => requireGate(dir, 'G3'), /G3 chưa qua: quality-gate\.md chưa có file\./);
+    && error.message === 'G2 chưa qua: test-plan.md chờ duyệt. Bước tiếp: Tester review và duyệt test-plan.md.');
+});
+
+test('requireGate names the earliest gate that blocks, with its own reason and next step', () => {
+  const noRequirements = bundle({ 'test-plan.md': doc('P', approved('2026-09-28 14:30')) });
+  assert.throws(() => requireGate(noRequirements, 'G2'),
+    { message: 'G2 chưa qua vì G1 chưa qua: requirements.md chưa có file. Bước tiếp: bước 1 — requirement-analyst viết requirements.md.' });
+  const malformed = bundle({ 'requirements.md': doc('R', '> **Duyệt:** ✅ Đã duyệt — A — hôm qua'), 'test-plan.md': doc('P', approved('2026-09-28 14:30')) });
+  assert.throws(() => requireGate(malformed, 'G2'), { message: /^G2 chưa qua vì G1 chưa qua: requirements\.md: dòng duyệt sai định dạng/ });
+  const pendingBoth = bundle({ 'requirements.md': doc('R', PENDING_LINE), 'test-plan.md': doc('P', PENDING_LINE) });
+  assert.throws(() => requireGate(pendingBoth, 'G3'),
+    { message: 'G3 chưa qua vì G1 chưa qua: requirements.md chờ duyệt. Bước tiếp: Tester review và duyệt requirements.md.' });
+  assert.throws(() => requireGate(g3Bundle(null), 'G4'),
+    { message: 'G4 chưa qua vì G3 chưa qua: 2 TC fail chưa phân loại (TC-004, TC-10). Bước tiếp: chạy self-healer cho TC-004, TC-10.' });
+});
+
+test('only the approval line under the title counts, not an approved line further down', () => {
+  const md = `# Plan\n${PENDING_LINE}\n\nVí dụ:\n\n${approved('2026-09-28 14:30')}\n`;
+  assert.deepEqual(parseApproval(md), { approved: false, malformed: false });
 });

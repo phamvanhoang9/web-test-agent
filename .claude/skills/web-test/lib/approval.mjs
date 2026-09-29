@@ -24,12 +24,16 @@ export const PENDING_LINE = '> **Duyệt:** ⬜ Chờ duyệt';
 const LINE = /^> \*\*Duyệt:\*\*.*$/mu;
 const APPROVED = /^> \*\*Duyệt:\*\*\s*(?:✅\s*)?Đã duyệt\s*[—-]\s*(.+?)\s*[—-]\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2})\s*$/mu;
 
-/** `{ approved, by, at }` from the approval line; `malformed` when it claims approval but cannot be read. */
+/**
+ * `{ approved, by, at }` from the file's approval line (the first one: an approved line further
+ * down, such as a pasted example, does not count); `malformed` when it claims approval but
+ * cannot be read.
+ */
 export function parseApproval(md) {
-  const text = md.normalize('NFC');
-  const match = APPROVED.exec(text);
+  const line = LINE.exec(md.normalize('NFC'))?.[0] ?? '';
+  const match = APPROVED.exec(line);
   if (match) return { approved: true, by: match[1], at: match[2] };
-  return { approved: false, malformed: /Đã duyệt/u.test(LINE.exec(text)?.[0] ?? '') };
+  return { approved: false, malformed: /Đã duyệt/u.test(line) };
 }
 
 /** Failed TCs of the latest run that the current heal-proposal.md does not name. */
@@ -85,16 +89,38 @@ export function gateStatus(dir) {
   return statuses;
 }
 
-export class GateError extends Error {}
-
+const STEP = {
+  G1: 'bước 1 — requirement-analyst viết requirements.md',
+  G2: 'bước 2 — test-designer viết test-plan.md',
+  G3: 'bước 3 — sinh script, chạy test, rồi chạy report.mjs',
+  G4: 'bước 4 — result-analyst viết bug-report.md',
+};
 const STATE_TEXT = { missing: 'chưa có file', pending: 'chờ duyệt' };
 
-/** The gate's status when it has passed; a GateError naming what blocks it otherwise. */
+/** Why a gate that has not passed is blocked. */
+const whyBlocked = (status) => status.reason ?? `${status.file} ${STATE_TEXT[status.state]}`;
+
+/** What to do next to pass a gate that has not passed, in words for the tester. */
+export function nextStep(status) {
+  if (status.unclassified?.length) return `chạy self-healer cho ${status.unclassified.join(', ')}`;
+  if (status.state === 'missing') return STEP[status.gate];
+  if (status.state === 'pending') return `Tester review và duyệt ${status.file}`;
+  return `Tester review lại ${status.file}`;
+}
+
+export class GateError extends Error {}
+
+/**
+ * The gate's status when it has passed; otherwise a GateError naming the earliest gate in the
+ * chain that blocks it, that gate's own reason, and the next step.
+ */
 export function requireGate(dir, gate) {
-  const status = gateStatus(dir).find((s) => s.gate === gate);
+  const statuses = gateStatus(dir);
+  const status = statuses.find((s) => s.gate === gate);
   if (status.state === 'approved') return status;
-  const why = status.reason ?? `${status.file} ${STATE_TEXT[status.state]}`;
-  throw new GateError(`${gate} chưa qua: ${why}. Tester cần review và duyệt ${status.file} trước khi đi tiếp.`);
+  const blocker = statuses.find((s) => s.state !== 'approved');
+  const head = blocker === status ? `${gate} chưa qua` : `${gate} chưa qua vì ${blocker.gate} chưa qua`;
+  throw new GateError(`${head}: ${whyBlocked(blocker)}. Bước tiếp: ${nextStep(blocker)}.`);
 }
 
 /** CLI helper: print why a gate blocks and exit 3. */

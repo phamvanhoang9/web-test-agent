@@ -19,6 +19,12 @@ const DESCRIPTION = ['Mức độ', 'TC', 'REQ', 'Điều kiện trước', 'Cá
 const clean = (raw) => raw.trim().replace(/(\s*·|\n\s*-)+$/u, '').trim();
 const canonical = (value, allowed) => allowed.find((a) => a.toLowerCase() === (value ?? '').trim().toLowerCase());
 const ids = (value) => (value ?? '').split(/[,\s]+/).filter((v) => /^(TC|REQ)-\d+$/.test(v));
+// The Jira field holds a ticket key once the bug is imported; empty or a dash means not yet.
+const JIRA_KEY = /^[A-Z][A-Z0-9_]*-\d+$/;
+const jiraOf = (fields) => {
+  const value = (fields.Jira ?? '').trim();
+  return value === '—' || value === '-' ? '' : value;
+};
 
 /** Every bug section: `{ id, title, fields }`. */
 export function parseBugReport(md) {
@@ -46,12 +52,16 @@ export function validateBug({ fields }) {
     }
   }
   for (const name of REQUIRED) if (!fields[name]) problems.push(`thiếu ${name}`);
+  const jira = jiraOf(fields);
+  if (jira && !JIRA_KEY.test(jira)) {
+    problems.push(`Jira phải để trống, "—", hoặc là mã ticket như PROJ-123 (đang là "${jira}")`);
+  }
   return problems;
 }
 
 /** Bugs still to import: not fixed, and no Jira key yet. */
 export const exportable = (bugs) =>
-  bugs.filter((b) => canonical(b.fields['Trạng thái'], STATES) !== 'Đã sửa' && !b.fields.Jira);
+  bugs.filter((b) => canonical(b.fields['Trạng thái'], STATES) !== 'Đã sửa' && !jiraOf(b.fields));
 
 const csvCell = (value) => (/[",\r\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value);
 

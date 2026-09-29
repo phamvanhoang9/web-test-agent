@@ -45,6 +45,14 @@ test('exportable leaves out fixed bugs and bugs that already have a Jira key', (
   assert.deepEqual(exportable(parseBugReport(FIXTURE)).map((b) => b.id), ['BUG-001']);
 });
 
+test('a dash in the Jira field means no key yet; anything else that is not a key is an error', () => {
+  const withDash = parseBugReport(FIXTURE.replace('- **Jira:**\n\n**Điều kiện trước:**', '- **Jira:** —\n\n**Điều kiện trước:**'));
+  assert.deepEqual(exportable(withDash).map((b) => b.id), ['BUG-001']);
+  assert.deepEqual(validateBug(withDash[0]), []);
+  const withNote = parseBugReport(FIXTURE.replace('- **Jira:**\n\n**Điều kiện trước:**', '- **Jira:** xem sau\n\n**Điều kiện trước:**'));
+  assert.deepEqual(validateBug(withNote[0]), ['Jira phải để trống, "—", hoặc là mã ticket như PROJ-123 (đang là "xem sau")']);
+});
+
 test('toJiraCsv quotes commas, quotes and newlines, uses CRLF and no BOM', () => {
   const csv = toJiraCsv(parseBugReport(FIXTURE).slice(0, 2), 'app.test');
   assert.ok(!csv.startsWith('﻿'));

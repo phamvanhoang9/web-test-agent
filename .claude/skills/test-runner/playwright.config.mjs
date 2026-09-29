@@ -6,7 +6,7 @@
 import { defineConfig, devices } from '@playwright/test';
 import path from 'node:path';
 import { loadEnv } from '../test-designer/lib/bundle.mjs';
-import { requireGate } from '../web-test/lib/approval.mjs';
+import { requireGatesOrExit } from '../web-test/lib/approval.mjs';
 
 const root = process.cwd(); // the project being tested
 const base = process.env.BASE_URL;
@@ -19,8 +19,8 @@ const outDir = path.join(root, 'artifacts', host); // host '' → artifacts/ (no
 // Credentials (TEST_EMAIL/TEST_PASSWORD...) from .env.<host>, then .env; the shell wins.
 loadEnv(host, root);
 // Gate G2: specs run only against a test plan the tester approved (after requirements.md).
-// Throws a GateError naming what blocks it, so `npm test` stops before opening a browser.
-if (host) requireGate(outDir, 'G2');
+// Prints what blocks it and exits 3 — "blocked", not "tests failed" — before opening a browser.
+if (host) requireGatesOrExit(outDir, 'G2');
 
 export default defineConfig({
   testDir: path.join(outDir, 'tests'),
