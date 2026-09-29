@@ -1,7 +1,7 @@
 {
   "name": "web-test-agent",
   "version": "1.0.0",
-  "description": "E2E black-box web testing workflow (test-designer -> script-generator -> test-runner -> self-healer). Project-local skills under .claude/skills/. Everything lands in artifacts/<host>/.",
+  "description": "E2E black-box web testing workflow following a tester's process (requirement-analyst -> test-designer -> script-generator -> test-runner -> self-healer -> result-analyst), with a tester approval gate after each step. Project-local skills under .claude/skills/. Everything lands in artifacts/<host>/.",
   "type": "module",
   "private": true,
   "scripts": {
