@@ -93,7 +93,7 @@ Kết quả setup — <thư mục>
 - MCP:         Đã kết nối             | Chưa kết nối — khởi động lại Claude Code rồi chạy lại setup
 - Quyền MCP:   Đã thêm                | Chưa thêm — cần cho phép ghi .claude/settings.local.json (rule: <rule>)
 - Chặn đọc .env: Đã thêm              | Chưa thêm — cần cho phép ghi .claude/settings.local.json
-Bước tiếp theo: đặt tài liệu yêu cầu vào artifacts/<host>/requirements/ (nếu có) rồi nói
-"test trang <url>".
+Bước tiếp theo: nói "test trang <url>" kèm đường dẫn tài liệu yêu cầu (nếu có, để ở đâu
+cũng được).
 ```
 Show one value per line: the left one when the check passed, the right one when it did not.

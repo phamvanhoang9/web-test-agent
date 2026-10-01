@@ -61,7 +61,8 @@ Four steps, orchestrated by the `web-test` skill; each ends at an approval gate 
 there until the tester approves**. `plugins/web-test-agent/skills/web-test/SKILL.md` is the map,
 `checklist.md` the exit criteria.
 
-1. **requirement-analyst** — reads the documents in `artifacts/<host>/requirements/`, runs
+1. **requirement-analyst** — reads the documents the tester points to (any path they name in the
+   chat, or `artifacts/<host>/requirements/`; read in place, never copied), runs
    `explore.mjs` / `crawl.mjs` (evidence: `exploration.md`, `screenshot.png`, `console.json`,
    `network.json`, `crawl/`), and writes `requirements.md`: testable `REQ-NNN`s with a source and
    a status, business flows, open questions. → **G1**
