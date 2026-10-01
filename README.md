@@ -121,8 +121,8 @@ knob you need:
 # where does this site stand? (the four gates and the next step)
 npm run status -- https://example.com
 
-# 1 · requirements: put your documents in artifacts/example.com/requirements/, then the agent
-#     explores the site and writes requirements.md  →  you review and approve (G1)
+# 1 · requirements: tell the agent where your documents are (any folder on your machine),
+#     it explores the site and writes requirements.md  →  you review and approve (G1)
 node plugins/web-test-agent/skills/test-designer/explore.mjs https://example.com
 #     large or login-gated site: crawl it instead (roles and credentials from .env)
 node plugins/web-test-agent/skills/test-designer/crawl.mjs https://example.com
@@ -176,7 +176,7 @@ npx playwright show-report artifacts/example.com/html-report
 
 | # | Step | Skill | What happens | You approve |
 |---|---|---|---|---|
-| 1 | REQUIREMENTS | [`requirement-analyst`](plugins/web-test-agent/skills/requirement-analyst/SKILL.md) | Reads the documents you put in `requirements/`, drives headless Chromium over the live site (`explore.mjs` / `crawl.mjs`), and turns both into testable requirements. What no document covers is inferred from the site and marked as such; business rules it can only guess become questions for the PO | `requirements.md` (G1) |
+| 1 | REQUIREMENTS | [`requirement-analyst`](plugins/web-test-agent/skills/requirement-analyst/SKILL.md) | Reads the documents you point it to (anywhere on your machine; your path in the chat is the access confirmation, and they are read in place, not copied), drives headless Chromium over the live site (`explore.mjs` / `crawl.mjs`), and turns both into testable requirements. What no document covers is inferred from the site and marked as such; business rules it can only guess become questions for the PO | `requirements.md` (G1) |
 | 2 | DESIGN | [`test-designer`](plugins/web-test-agent/skills/test-designer/SKILL.md) | Scores risk (probability x impact) and writes a test plan linked to the requirements, covering every requirement, route and control (`coverage.mjs` checks) | `test-plan.md` (G2) |
 | 3 | EXECUTE | [`script-generator`](plugins/web-test-agent/skills/script-generator/SKILL.md), [`test-runner`](plugins/web-test-agent/skills/test-runner/SKILL.md), [`self-healer`](plugins/web-test-agent/skills/self-healer/SKILL.md) | Turns each `Tool=PW` row into a Playwright test, runs the specs, drives `Tool=MCP` cases live, merges both into the quality gate. On failure the healer reproduces on the live page and separates real bugs from broken scripts | `quality-gate.md` (G3) |
 | 4 | ANALYSE | [`result-analyst`](plugins/web-test-agent/skills/result-analyst/SKILL.md) | Writes the bug report — one bug per cause, ids stable across runs, evidence saved — and a release recommendation, then exports approved bugs to a Jira CSV | `bug-report.md` (G4) |
@@ -309,7 +309,7 @@ One domain, one self-contained bundle. The host comes from `BASE_URL`, sanitized
 
 ```
 artifacts/example.com/
-├── requirements/        # your requirement documents (docx, pdf, md, xlsx)
+├── requirements/        # optional drop folder for requirement documents (docx, pdf, md, xlsx); they may live anywhere
 ├── requirements.md      # step 1, approved at G1 — testable requirements, flows, questions
 ├── test-plan.md         # step 2, approved at G2; the gate fills in its Status column
 ├── tests/               # committed — the generated specs

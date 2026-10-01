@@ -3,7 +3,7 @@
 Run `gate.mjs <url>` first (the status command in the web-test skill): it shows which gates are passed.
 
 REQUIREMENTS — requirement-analyst (`artifacts/<host>/requirements.md`, gate G1)
-- [ ] Read every document in `artifacts/<host>/requirements/`, or stated that there were none
+- [ ] Read every document the tester pointed to (any location, or `artifacts/<host>/requirements/`), or stated that there were none; each listed by path in "Nguồn"
 - [ ] Ran `explore.mjs`, or `crawl.mjs` for a large or login-gated site (chrome-devtools MCP for hard sites); opened and **looked at** the screenshot(s)
 - [ ] If crawled: read the `site-map.md` warnings (limits, skipped URLs) and stated any incomplete coverage; every access-matrix row that differs between roles is a REQ
 - [ ] Noted redirects, HTTP status, console errors, failed requests

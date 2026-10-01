@@ -6,7 +6,7 @@
 > - <vd: Kiểm 6 mục "Chấp nhận tạm" — hành vi hiện tại có đúng là hành vi mong muốn không>
 > - <vd: Xem 2 chức năng có trong tài liệu nhưng không thấy trên trang>
 
-> Phân tích từ tài liệu trong `artifacts/<host>/requirements/` và trang `<URL>` ngày <DATE>.
+> Phân tích từ các tài liệu ở mục "Nguồn" và trang `<URL>` ngày <DATE>.
 > Trạng thái: **Đã xác nhận** = có tài liệu hoặc là chuẩn chung · **Chấp nhận tạm** = suy luận
 > từ hành vi hiển nhiên, là mốc hồi quy · **Cần hỏi** = quy tắc nghiệp vụ suy luận, chờ PO/BA ·
 > **Bỏ** = không còn áp dụng (giữ dòng, không xoá).
@@ -14,7 +14,7 @@
 ## Nguồn
 | Tài liệu | Phiên bản / ngày | Ghi chú |
 |---|---|---|
-| <vd: PRD.pdf> | <vd: v2.1, 2026-09-01> | <vd: chỉ có phần Đăng nhập, Đơn hàng> |
+| <vd: D:\docs\PRD.pdf> | <vd: v2.1, 2026-09-01> | <vd: chỉ có phần Đăng nhập, Đơn hàng> |
 
 ## Requirement
 > Bảng này là "hợp đồng" với bước design: mỗi REQ `Đã xác nhận` hoặc `Chấp nhận tạm` phải có
