@@ -19,7 +19,7 @@ no automation click can reach it. The promise never settles; the app is waiting 
 ## The fix: Chrome flags, passed through chrome-devtools MCP
 
 `chrome-devtools-mcp` forwards arbitrary Chrome switches with `--chrome-arg` (repeatable).
-It is already wired up in [`.mcp.json`](../../../../../.mcp.json):
+It is already wired up in [`.mcp.json`](../../../../.mcp.json):
 
 ```json
 {

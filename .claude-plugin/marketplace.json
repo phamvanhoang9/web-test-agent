@@ -1,0 +1,12 @@
+{
+  "name": "web-test-agent",
+  "description": "Skill-driven E2E web testing workflow for testers",
+  "owner": { "name": "stevehoang" },
+  "plugins": [
+    {
+      "name": "web-test-agent",
+      "source": "./plugins/web-test-agent",
+      "description": "Requirement analysis, test design, execution and bug reporting for a website, with tester approval gates"
+    }
+  ]
+}

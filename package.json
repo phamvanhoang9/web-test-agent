@@ -1,18 +1,18 @@
 {
   "name": "web-test-agent",
-  "version": "1.0.0",
-  "description": "E2E black-box web testing workflow following a tester's process (requirement-analyst -> test-designer -> script-generator -> test-runner -> self-healer -> result-analyst), with a tester approval gate after each step. Project-local skills under .claude/skills/. Everything lands in artifacts/<host>/.",
+  "version": "2.0.0",
+  "description": "Development workspace for the web-test-agent Claude Code plugin (plugins/web-test-agent/). Testers install the plugin; this package.json only serves unit tests and local runs.",
   "type": "module",
   "private": true,
   "scripts": {
-    "explore": "node .claude/skills/test-designer/explore.mjs",
-    "crawl": "node .claude/skills/test-designer/crawl.mjs",
-    "coverage": "node .claude/skills/test-designer/coverage.mjs",
-    "test": "playwright test --config .claude/skills/test-runner/playwright.config.mjs",
-    "test:unit": "node --test \".claude/skills/**/*.test.mjs\"",
-    "gate": "node .claude/skills/test-runner/report.mjs",
-    "status": "node .claude/skills/web-test/gate.mjs",
-    "bugs": "node .claude/skills/result-analyst/bugs.mjs"
+    "explore": "node plugins/web-test-agent/skills/test-designer/explore.mjs",
+    "crawl": "node plugins/web-test-agent/skills/test-designer/crawl.mjs",
+    "coverage": "node plugins/web-test-agent/skills/test-designer/coverage.mjs",
+    "test": "playwright test --config plugins/web-test-agent/skills/test-runner/playwright.config.mjs",
+    "test:unit": "node --test \"plugins/web-test-agent/skills/**/*.test.mjs\"",
+    "gate": "node plugins/web-test-agent/skills/test-runner/report.mjs",
+    "status": "node plugins/web-test-agent/skills/web-test/gate.mjs",
+    "bugs": "node plugins/web-test-agent/skills/result-analyst/bugs.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0"
