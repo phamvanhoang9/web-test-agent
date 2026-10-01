@@ -50,6 +50,9 @@ has not changed since exploration — say so whenever you report it.
 
 ## Explore — three ways, by difficulty
 
+If `explore.mjs` or `crawl.mjs` exits **4**, Playwright is not installed in this work folder:
+run the `web-test-agent:setup` skill, then repeat the command.
+
 **Default — Playwright headless** (fast, captures evidence to `artifacts/<host>/`):
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/skills/test-designer/explore.mjs" https://brse.ai
