@@ -16,16 +16,17 @@
 // behind a click/fill), e.g. a JSON array:
 //   [{"fill":"input[name=email]","value":"a@b.com"},{"click":"button:has-text('Sign in')"}]
 
-import { chromium } from '@playwright/test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { bundleDir, hostOf } from './lib/bundle.mjs';
 import { navigate, observe, renderExploration, snapshot, summarize } from './lib/capture.mjs';
+import { playwrightOrExit } from './lib/playwright.mjs';
 
 const url = process.argv[2];
 if (!url) {
   console.error('Usage: node explore.mjs <url> [--steps steps.json]');
   process.exit(1);
 }
+const { chromium } = playwrightOrExit();
 const stepsFlag = process.argv.indexOf('--steps');
 const steps = stepsFlag !== -1
   ? JSON.parse(readFileSync(process.argv[stepsFlag + 1], 'utf8'))

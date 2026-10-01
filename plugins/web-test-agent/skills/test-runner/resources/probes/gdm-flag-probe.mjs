@@ -3,7 +3,9 @@
 // Served over http://127.0.0.1 because getDisplayMedia needs a secure context.
 //   node .scratch/gdm-flag-probe.mjs [headed]
 import { createServer } from 'node:http';
-import { chromium } from 'playwright';
+import { playwrightOrExit } from '../../../test-designer/lib/playwright.mjs';
+
+const { chromium } = playwrightOrExit();
 
 const HTML = `<!doctype html><title>GDM PROBE TAB</title>
 <button id="b">go</button>

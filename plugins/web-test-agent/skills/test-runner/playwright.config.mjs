@@ -3,10 +3,13 @@
 // results. The host is derived from BASE_URL so one run = one domain bundle:
 //   BASE_URL=https://brse.ai npx playwright test --config .claude/skills/test-runner/playwright.config.mjs
 //   → testDir artifacts/brse.ai/tests, outputs artifacts/brse.ai/{html-report,results.json,test-results}
-import { defineConfig, devices } from '@playwright/test';
 import path from 'node:path';
 import { loadEnv } from '../test-designer/lib/bundle.mjs';
+import { playwrightOrExit } from '../test-designer/lib/playwright.mjs';
 import { requireGatesOrExit } from '../web-test/lib/approval.mjs';
+
+// The same copy the specs in artifacts/<host>/tests/ import; two copies make Playwright refuse to run.
+const { defineConfig, devices } = playwrightOrExit();
 
 const root = process.cwd(); // the project being tested
 const base = process.env.BASE_URL;

@@ -21,7 +21,6 @@
 //         artifacts/<host>/crawl/pages/<url>/   (exploration.md + screenshot.png; cleared per crawl)
 //         artifacts/<host>/.auth/<role>.json    (saved sessions — they contain tokens)
 
-import { chromium } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -29,6 +28,7 @@ import { parseArgs } from 'node:util';
 import { login, LoginError, missingCredentials } from './lib/auth.mjs';
 import { bundleDir, hostOf, loadEnv } from './lib/bundle.mjs';
 import { capturePage, probeFile, renderExploration } from './lib/capture.mjs';
+import { playwrightOrExit } from './lib/playwright.mjs';
 import { extractRoutes, instantiate, scriptUrls } from './lib/route-discovery.mjs';
 import { apiDenial, buildSiteMap, renderSiteMap } from './lib/site-map.mjs';
 import { isFileUrl, isUnsafe, normalizeUrl, TemplateIndex } from './lib/url-template.mjs';
@@ -54,6 +54,8 @@ if (!startUrl) {
   console.error('Usage: node crawl.mjs <url> [--roles admin,user] [--max-pages 200] [--max-minutes 15] ...');
   process.exit(1);
 }
+
+const { chromium } = playwrightOrExit();
 
 const host = hostOf(startUrl);
 loadEnv(host);
