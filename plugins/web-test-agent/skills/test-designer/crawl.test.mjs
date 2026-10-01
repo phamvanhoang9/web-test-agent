@@ -164,9 +164,9 @@ describe('crawl failures and limits', () => {
     t.after(() => fixture.close());
 
     const run = await runCrawl(fixture, ['--concurrency', '1'], { WEBTEST_ROLES: 'admin', ...CREDENTIALS });
+    assert.equal(run.code, 0, run.stderr);
     const map = run.siteMap();
 
-    assert.equal(run.code, 0, run.stderr);
     assert.equal(fixture.logins.admin, 2);
     assert.deepEqual(map.limitWarnings, []);
     assert.ok(!map.templates.some((t) => t.visits.length && t.visits.every((v) => v.loginRedirect)));
@@ -177,9 +177,9 @@ describe('crawl failures and limits', () => {
     t.after(() => fixture.close());
 
     const run = await runCrawl(fixture, [], { WEBTEST_ROLES: 'admin', ...CREDENTIALS });
+    assert.equal(run.code, 0, run.stderr);
     const map = run.siteMap();
 
-    assert.equal(run.code, 0, run.stderr);
     assert.ok(map.templates.some((row) => row.template === '/products'), '/products is linked only from /');
     assert.ok(map.health.some((h) => h.template === '/' && h.type === 'screenshot-error'));
   });
@@ -189,9 +189,9 @@ describe('crawl failures and limits', () => {
     t.after(() => fixture.close());
 
     const run = await runCrawl(fixture);
+    assert.equal(run.code, 0, run.stderr);
     const map = run.siteMap();
 
-    assert.equal(run.code, 0, run.stderr);
     assert.equal(fixture.logins.user, 1, 'no re-login was attempted');
     assert.deepEqual(map.limitWarnings, []);
     assert.equal(map.access['/admin'].user, 'login-redirect');
@@ -219,9 +219,9 @@ describe('crawl failures and limits', () => {
     t.after(() => fixture.close());
 
     const run = await runCrawl(fixture, ['--no-bundle-routes'], { WEBTEST_ROLES: 'admin', ...CREDENTIALS });
+    assert.equal(run.code, 0, run.stderr);
     const map = run.siteMap();
 
-    assert.equal(run.code, 0, run.stderr);
     assert.equal(map.bundleRoutes, null);
     assert.ok(!map.templates.some((row) => row.template === '/hidden-route'));
   });
