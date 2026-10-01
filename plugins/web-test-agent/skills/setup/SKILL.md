@@ -70,13 +70,18 @@ Look at the tools available in this session for one whose name ends in
   run setup again. If it is still missing after a restart, say so in the report; `Tool=MCP`
   cases then run through a scratch Playwright script instead (the test-runner skill covers it).
 
-## 8. Permission for the MCP tools
-Only when step 7 found the server: add the allow rule from step 7 to `permissions.allow` in
-`.claude/settings.local.json` of the current folder, so MCP cases run without a prompt per
-click. Create the file as `{ "permissions": { "allow": ["<rule>"] } }` if it does not exist;
-otherwise keep everything already in it and add the rule only if it is not there. Tell the
-tester you added it. If the write is declined or blocked, do not retry and do not stop: finish
-the report and show the rule there so the tester can approve it later.
+## 8. Permissions
+Edit `.claude/settings.local.json` of the current folder. Create it as
+`{ "permissions": { "allow": [], "deny": [] } }` if it does not exist; otherwise keep everything
+already in it and add only the rules that are missing.
+- **Always**, in `permissions.deny`: `Read(./.env)`, `Read(./.env.*)` and
+  `Read(./artifacts/**/.auth/**)`. Credentials and saved sessions are loaded by the scripts;
+  the agent never needs to open them, and a hostile page must not be able to talk it into it.
+- **Only when step 7 found the server**, in `permissions.allow`: the rule from step 7, so MCP
+  cases run without a prompt per click.
+
+Tell the tester what you added. If the write is declined or blocked, do not retry and do not
+stop: finish the report and show the rules there so the tester can approve them later.
 
 ## 9. Report (in Vietnamese, plain language)
 ```
@@ -87,6 +92,7 @@ Kết quả setup — <thư mục>
 - Chrome:      OK                     | Chưa thấy Chrome — các case MCP cần Chrome
 - MCP:         Đã kết nối             | Chưa kết nối — khởi động lại Claude Code rồi chạy lại setup
 - Quyền MCP:   Đã thêm                | Chưa thêm — cần cho phép ghi .claude/settings.local.json (rule: <rule>)
+- Chặn đọc .env: Đã thêm              | Chưa thêm — cần cho phép ghi .claude/settings.local.json
 Bước tiếp theo: đặt tài liệu yêu cầu vào artifacts/<host>/requirements/ (nếu có) rồi nói
 "test trang <url>".
 ```
