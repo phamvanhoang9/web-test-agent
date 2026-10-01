@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // coverage.mjs — check that test-plan.md accounts for everything exploration found.
 //
-// Usage: node .claude/skills/test-designer/coverage.mjs <url>
+// Usage: node coverage.mjs <url>
 //
 // Requires gate G1 (requirements.md approved). Reads artifacts/<host>/requirements.md,
 // test-plan.md, exploration.md (explore.mjs) and crawl/site-map.json + crawl/pages/*/exploration.md
@@ -20,7 +20,7 @@ import { checkCoverage, parseOutline, parsePlan, renderCoverage } from './lib/co
 
 const url = process.argv[2];
 if (!url) {
-  console.error('Usage: node .claude/skills/test-designer/coverage.mjs <url>');
+  console.error('Usage: node coverage.mjs <url>');
   process.exit(2);
 }
 const dir = bundleDir(url);

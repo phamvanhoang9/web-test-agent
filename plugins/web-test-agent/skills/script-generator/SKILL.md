@@ -7,7 +7,7 @@ Turn an approved test plan into runnable Playwright specs. Part of step 3 (execu
 `web-test` workflow. Input: `artifacts/<host>/test-plan.md` (TC table, approved at gate G2). Output:
 `artifacts/<host>/tests/<area>.spec.mjs`.
 
-Run from the project root.
+Run from the tester's work folder.
 
 ## What to achieve
 Read the plan's **`## Test cases` table** and, for every row with **`Tool=PW`**,
@@ -16,7 +16,7 @@ chrome-devtools, not as specs. Generation is **judgement-driven** (you read the 
 the exploration, then write idiomatic tests) — there is no rigid parser to satisfy.
 
 ## How
-0. Run `node .claude/skills/web-test/gate.mjs <url>`; G2 must show ✅ (`npm test` refuses to
+0. Run `node "${CLAUDE_PLUGIN_ROOT}/skills/web-test/gate.mjs" <url>`; G2 must show ✅ (`playwright test` refuses to
    run otherwise).
 1. Read `artifacts/<host>/test-plan.md` and `artifacts/<host>/exploration.md` (real
    selectors/elements observed on the site).
@@ -25,7 +25,7 @@ the exploration, then write idiomatic tests) — there is no rigid parser to sat
    an area with no spec yet, start from the template:
    ```bash
    mkdir -p artifacts/<host>/tests
-   cp -n .claude/skills/script-generator/templates/example.spec.mjs artifacts/<host>/tests/<area>.spec.mjs
+   cp -n "${CLAUDE_PLUGIN_ROOT}/skills/script-generator/templates/example.spec.mjs" artifacts/<host>/tests/<area>.spec.mjs
    ```
 3. One `test()` per `Tool=PW` row. **Encode the TC id + priority in the title** so the
    gate scores it: `test('TC-001 [P0] <Mô tả>', async ({ page }) => { ... })`.

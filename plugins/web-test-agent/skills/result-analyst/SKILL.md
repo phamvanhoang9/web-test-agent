@@ -7,12 +7,12 @@ Review and analyse the results of a test run. Step 4 of the `web-test` workflow.
 whose `quality-gate.md` passed gate **G3**. Output: `artifacts/<host>/bug-report.md`, which the
 tester approves (gate **G4**), then `artifacts/<host>/bugs.csv` for Jira.
 
-Run from the project root.
+Run from the tester's work folder.
 
 ## Start
 
 ```bash
-node .claude/skills/web-test/gate.mjs https://app.example.com
+node "${CLAUDE_PLUGIN_ROOT}/skills/web-test/gate.mjs" https://app.example.com
 ```
 
 G3 must show ✅. If not, go back: failures still need `self-healer`, or the tester has not
@@ -52,7 +52,7 @@ approved the quality gate.
 Only for a host with no bug report yet:
 
 ```bash
-cp -n .claude/skills/result-analyst/templates/bug-report.template.md artifacts/<host>/bug-report.md
+cp -n "${CLAUDE_PLUGIN_ROOT}/skills/result-analyst/templates/bug-report.template.md" artifacts/<host>/bug-report.md
 ```
 
 Field names and allowed values are read by `bugs.mjs`: keep `## BUG-NNN: <title>` headings and
@@ -66,7 +66,7 @@ path. After they say "duyệt", write the approval line
 `> **Duyệt:** ✅ Đã duyệt — <name> — <YYYY-MM-DD HH:mm>` (same rule as the other gates), then:
 
 ```bash
-node .claude/skills/result-analyst/bugs.mjs https://app.example.com
+node "${CLAUDE_PLUGIN_ROOT}/skills/result-analyst/bugs.mjs" https://app.example.com
 ```
 
 It exports bugs that are not `Đã sửa` and have no Jira key to `bugs.csv`. Tell the tester where

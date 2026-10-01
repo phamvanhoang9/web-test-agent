@@ -2,7 +2,7 @@
 // gate.mjs — where a site stands in the four-step process: the state of gates G1–G4 and the
 // next step. The agent runs it at the start of every session and every phase.
 //
-// Usage: node .claude/skills/web-test/gate.mjs <url>     (or BASE_URL=<url>)
+// Usage: node gate.mjs <url>     (or BASE_URL=<url>)
 // Exit 0 always, except 2 when no URL is given.
 
 import { bundleDir, hostOf } from '../test-designer/lib/bundle.mjs';
@@ -10,7 +10,7 @@ import { gateStatus, nextStep } from './lib/approval.mjs';
 
 const url = process.argv[2] || process.env.BASE_URL;
 if (!url) {
-  console.error('Usage: node .claude/skills/web-test/gate.mjs <url>');
+  console.error('Usage: node gate.mjs <url>');
   process.exit(2);
 }
 

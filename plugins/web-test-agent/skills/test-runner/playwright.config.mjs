@@ -1,7 +1,7 @@
 // Playwright config for the web-test workflow (test-runner skill).
 // Everything for a target site lives under artifacts/<host>/ — specs, reports,
 // results. The host is derived from BASE_URL so one run = one domain bundle:
-//   BASE_URL=https://brse.ai npx playwright test --config .claude/skills/test-runner/playwright.config.mjs
+//   BASE_URL=https://brse.ai npx playwright test --config <plugin>/skills/test-runner/playwright.config.mjs
 //   → testDir artifacts/brse.ai/tests, outputs artifacts/brse.ai/{html-report,results.json,test-results}
 import path from 'node:path';
 import { loadEnv } from '../test-designer/lib/bundle.mjs';

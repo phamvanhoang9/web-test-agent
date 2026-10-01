@@ -46,7 +46,7 @@ It is already wired up in [`.mcp.json`](../../../../.mcp.json):
 `--browserUrl`, `--wsEndpoint` or `--autoConnect` it is attaching to a browser someone else
 started, and the flags are ignored — start that Chrome with the switches instead.
 
-**MCP servers load once, at session start.** After editing `.mcp.json` you must start a new
+**MCP servers load once, at session start.** After editing the plugin's `.mcp.json` you must start a new
 Claude Code session before the flags take effect.
 
 ## What was actually measured (2026-09-22)
@@ -85,7 +85,7 @@ just in the probe.
 - **Negative permission cases die.** `--use-fake-ui-for-media-stream` auto-*accepts*
   everything, so "user denies screen share" can no longer be tested in the same session.
   Keep such a case on a session without the flag, and say so in its steps.
-- **Playwright specs need the same flags**, separately — they are not covered by `.mcp.json`.
+- **Playwright specs need the same flags**, separately — they are not covered by the plugin's `.mcp.json`.
   Add them to `launchOptions.args` in the runner config, or keep the case on `Tool=MCP`.
 - **Starting a meeting writes real data on staging.** Clean it up (see the cleanup rule in
   `SKILL.md`): the probe above created two meetings and deleted them again, returning the

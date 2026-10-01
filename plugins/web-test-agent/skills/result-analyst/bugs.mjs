@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // bugs.mjs — export the bugs of an approved bug-report.md to a CSV that Jira can import.
 //
-// Usage: node .claude/skills/result-analyst/bugs.mjs <url>     (or BASE_URL=<url>)
+// Usage: node bugs.mjs <url>     (or BASE_URL=<url>)
 // Needs gates G3 and G4 (exit 3 otherwise). A bug with a missing or invalid required field
 // stops the export (exit 1) and nothing is written. Exports the bugs that are not "Đã sửa" and
 // have no Jira key yet to artifacts/<host>/bugs.csv (overwritten); exit 0, also when there is
@@ -15,7 +15,7 @@ import { exportable, parseBugReport, toJiraCsv, validateBug } from './lib/bug-re
 
 const url = process.argv[2] || process.env.BASE_URL;
 if (!url) {
-  console.error('Usage: node .claude/skills/result-analyst/bugs.mjs <url>');
+  console.error('Usage: node bugs.mjs <url>');
   process.exit(2);
 }
 const dir = bundleDir(url);

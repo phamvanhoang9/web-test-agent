@@ -1,6 +1,6 @@
 # Self-validation checklist (run before declaring a test session done)
 
-Run `node .claude/skills/web-test/gate.mjs <url>` first: it shows which gates are passed.
+Run `gate.mjs <url>` first (the status command in the web-test skill): it shows which gates are passed.
 
 REQUIREMENTS — requirement-analyst (`artifacts/<host>/requirements.md`, gate G1)
 - [ ] Read every document in `artifacts/<host>/requirements/`, or stated that there were none
@@ -26,7 +26,7 @@ EXECUTE — script-generator, test-runner, self-healer (`artifacts/<host>/qualit
 - [ ] Locators role/label-based, not brittle CSS (selector-resilience.md)
 - [ ] No `waitForTimeout` as a sync mechanism (web-first assertions instead)
 - [ ] No real credentials committed — read from env
-- [ ] `Tool=PW` ran via `--config .claude/skills/test-runner/playwright.config.mjs` (BASE_URL set)
+- [ ] `Tool=PW` ran via the test-runner skill's `playwright.config.mjs` (BASE_URL set)
 - [ ] `Tool=MCP` cases executed via chrome-devtools after Playwright, recorded to `artifacts/<host>/mcp-results.json`
 - [ ] `report.mjs` produced `quality-gate.md`; decision (PASS/CONCERNS/BLOCKED/FAIL) matches reality
 - [ ] **Reported back to the user**: counts, per-priority rates, what changed since the last run, requirement coverage, failed and skipped lists, links

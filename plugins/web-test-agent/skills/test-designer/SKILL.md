@@ -8,11 +8,11 @@ workflow. Input: `artifacts/<host>/requirements.md` approved at gate **G1**, plu
 evidence of step 1. Output: `artifacts/<host>/test-plan.md` — a table the tester edits and
 approves (gate **G2**), that script-generator and test-runner consume downstream.
 
-Run from the project root. `<host>` = the URL's host (e.g. `brse.ai`).
+Run from the tester's work folder. `<host>` = the URL's host (e.g. `brse.ai`).
 
 ## Start
 ```bash
-node .claude/skills/web-test/gate.mjs https://app.example.com
+node "${CLAUDE_PLUGIN_ROOT}/skills/web-test/gate.mjs" https://app.example.com
 ```
 G1 must show ✅. No `requirements.md`, or not approved → run `requirement-analyst` first.
 The exploration evidence (`exploration.md`, `crawl/site-map.md`, `crawl/pages/*`) comes from
@@ -44,7 +44,7 @@ rerun `coverage.mjs` and send the changed rows back for review.
 
 Only for a host with no plan yet, copy the template and fill it:
 ```bash
-cp -n .claude/skills/test-designer/templates/test-cases.template.md artifacts/<host>/test-plan.md
+cp -n "${CLAUDE_PLUGIN_ROOT}/skills/test-designer/templates/test-cases.template.md" artifacts/<host>/test-plan.md
 ```
 - Score risks (probability × impact → P0–P3). Background: `resources/knowledge/risk-scoring.md`.
 - Fill the **`## Test cases` table**: `TC | REQ | P | Tool | Mô tả | Các bước | Kỳ vọng | Status`.
@@ -61,7 +61,7 @@ cp -n .claude/skills/test-designer/templates/test-cases.template.md artifacts/<h
 
 ## Check coverage (required before hand-off)
 ```bash
-node .claude/skills/test-designer/coverage.mjs https://app.example.com
+node "${CLAUDE_PLUGIN_ROOT}/skills/test-designer/coverage.mjs" https://app.example.com
 ```
 Compares the plan against `requirements.md`, `exploration.md`, `crawl/site-map.json` and every
 `crawl/pages/*/exploration.md`, and writes `artifacts/<host>/coverage.md` (with a REQ → TC

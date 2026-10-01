@@ -3,23 +3,23 @@ name: web-test
 description: E2E web-testing orchestrator for a tester's full process — requirement analysis, test design, execution, result analysis — each ending at a tester approval gate. Use when asked to test/QA a web app end-to-end, or to run the whole process. Sequences requirement-analyst → test-designer → script-generator → test-runner → self-healer → result-analyst.
 ---
 
-End-to-end black-box web testing for this project, following a tester's process. This skill is
+End-to-end black-box web testing for the site the tester names, following a tester's process. This skill is
 the **orchestrator**: it sequences six focused sub-skills through four steps, each ending at a
 gate the tester approves. No source code of the target needed.
 
 Everything for a target site is grouped under `artifacts/<host>/` (host derived
-from the URL, e.g. `artifacts/brse.ai/`). Run commands from the project root.
+from the URL, e.g. `artifacts/brse.ai/`). Run commands from the tester's work folder.
 
 ## The four steps
 
 | Step | Sub-skill | Does | Tester approves | Gate | Blocks until it passes |
 |---|---|---|---|---|---|
 | 1 REQUIREMENTS | **requirement-analyst** | read the documents in `requirements/`, explore the site, infer what no document covers → testable REQs, flows, open questions | `requirements.md` | G1 | `coverage.mjs` |
-| 2 DESIGN | **test-designer** | risk-based plan: a TC table linked to REQs; picks PW vs MCP per case | `test-plan.md` | G2 | `npm test`, `report.mjs`, MCP cases |
+| 2 DESIGN | **test-designer** | risk-based plan: a TC table linked to REQs; picks PW vs MCP per case | `test-plan.md` | G2 | `playwright test`, `report.mjs`, MCP cases |
 | 3 EXECUTE | **script-generator**, **test-runner**, **self-healer** | specs for `Tool=PW` rows, run PW + MCP cases, merge → quality gate; heal script faults, classify every failure | `quality-gate.md` | G3 | `result-analyst`, `bugs.mjs` |
 | 4 ANALYSE | **result-analyst** | bug report (one bug per cause, stable ids, evidence), release recommendation, Jira CSV | `bug-report.md` | G4 | `bugs.mjs` |
 
-Invoke each sub-skill in turn (it auto-loads, or read `.claude/skills/<name>/SKILL.md`).
+Invoke each sub-skill in turn by name (`web-test-agent:<name>`).
 **Stop at every gate.** Inside step 3, loop test-runner ↔ self-healer until every remaining
 failure is a confirmed real bug.
 
@@ -32,7 +32,7 @@ earlier than the previous one; G3 also needs every failed TC of the latest run n
 `heal-proposal.md`. Scripts blocked by a gate exit **3** and say which gate and why.
 
 ```bash
-node .claude/skills/web-test/gate.mjs https://brse.ai    # or: npm run status -- https://brse.ai
+node "${CLAUDE_PLUGIN_ROOT}/skills/web-test/gate.mjs" https://brse.ai
 ```
 shows all four gates and the next step — run it at the start of every session and every step.
 
@@ -47,21 +47,21 @@ Rules for the agent:
 ## Orchestrated run (the happy path)
 
 ```bash
-node .claude/skills/web-test/gate.mjs https://brse.ai
+node "${CLAUDE_PLUGIN_ROOT}/skills/web-test/gate.mjs" https://brse.ai
 # 1 REQUIREMENTS (requirement-analyst)
-node .claude/skills/test-designer/explore.mjs https://brse.ai     # or crawl.mjs
+node "${CLAUDE_PLUGIN_ROOT}/skills/test-designer/explore.mjs" https://brse.ai     # or crawl.mjs
 #    → artifacts/brse.ai/requirements.md              … tester approves (G1)
 # 2 DESIGN (test-designer) → artifacts/brse.ai/test-plan.md
-node .claude/skills/test-designer/coverage.mjs https://brse.ai    # must exit 0
+node "${CLAUDE_PLUGIN_ROOT}/skills/test-designer/coverage.mjs" https://brse.ai    # must exit 0
 #                                                     … tester approves (G2)
 # 3 EXECUTE (script-generator, test-runner, self-healer)
-BASE_URL=https://brse.ai npm test      # runs artifacts/brse.ai/tests
+BASE_URL=https://brse.ai npx playwright test --config "${CLAUDE_PLUGIN_ROOT}/skills/test-runner/playwright.config.mjs"   # runs artifacts/brse.ai/tests
 #    then the Tool=MCP cases → mcp-results.json
-BASE_URL=https://brse.ai npm run gate  # → quality-gate.md + runs/<runId>.json
+BASE_URL=https://brse.ai node "${CLAUDE_PLUGIN_ROOT}/skills/test-runner/report.mjs"   # → quality-gate.md + runs/<runId>.json
 #    failures → self-healer → heal-proposal.md … tester approves (G3)
 # 4 ANALYSE (result-analyst) → artifacts/brse.ai/bug-report.md
 #                                                     … tester approves (G4)
-npm run bugs -- https://brse.ai        # → bugs.csv for Jira
+node "${CLAUDE_PLUGIN_ROOT}/skills/result-analyst/bugs.mjs" https://brse.ai   # → bugs.csv for Jira
 ```
 
 `BASE_URL` is the single source that resolves `<host>` and every path under
@@ -69,18 +69,18 @@ npm run bugs -- https://brse.ai        # → bugs.csv for Jira
 before declaring a session done.
 
 ## Conventions (shared by all sub-skills)
-- One domain = one bundle under `artifacts/<host>/`. Nothing test-related at project root except `package.json`.
+- One domain = one bundle under `artifacts/<host>/`. Nothing test-related at the work folder's root except `package.json`.
 - REQ table columns: `REQ | Nhóm | Mô tả | Nguồn | Trạng thái | Xác nhận bởi`; Trạng thái ∈
   {Đã xác nhận, Chấp nhận tạm, Cần hỏi, Bỏ}.
 - TC table columns: `TC | REQ | P | Tool | Mô tả | Các bước | Kỳ vọng | Status`. `Tool` ∈ {PW, MCP}.
 - Spec test titles encode `TC-NNN [Pn]` so the gate can score them.
 - Gate thresholds: P0 = 100% (else FAIL), P1 ≥ 95% (else CONCERNS), P2/P3 informational.
-- Exit codes: 1 = FAIL / gaps / invalid input, 2 = BLOCKED / usage, 3 = an approval gate is not passed.
+- Exit codes: 1 = FAIL / gaps / invalid input, 2 = BLOCKED / usage, 3 = an approval gate is not passed, 4 = Playwright is not installed in this work folder (run the setup skill).
 
-## Setup (once)
-```bash
-npm install && npx playwright install chromium
-```
+## Setup (once per work folder)
+Run the `web-test-agent:setup` skill. It installs Playwright and Chromium into the current
+folder, creates `artifacts/` and `.gitignore`, and checks the chrome-devtools MCP server.
+Any script that exits **4** means this step was skipped: run setup, then repeat the command.
 
 ## Interop with BMAD testarch (if installed)
 For repo/PRD/story-aware strategy, hand off to `bmad-testarch-test-design`,

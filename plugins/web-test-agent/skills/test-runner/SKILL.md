@@ -7,30 +7,31 @@ Execute a site's test plan and decide the **quality gate**. Step 3 (execute) of 
 workflow. Runs both execution mechanisms, merges them, and **reports back to the user**, who
 approves the result at gate **G3**. Owns `playwright.config.mjs` + `report.mjs`.
 
-Run from the project root. `BASE_URL` sets the target and resolves `artifacts/<host>/`.
+Run from the tester's work folder. `BASE_URL` sets the target and resolves `artifacts/<host>/`.
 
 ## Start
 ```bash
-node .claude/skills/web-test/gate.mjs https://brse.ai
+node "${CLAUDE_PLUGIN_ROOT}/skills/web-test/gate.mjs" https://brse.ai
 ```
-G2 must show ✅: `npm test` and `report.mjs` refuse to run before it (exit 3, naming the gate).
+G2 must show ✅: `playwright test` and `report.mjs` refuse to run before it (exit 3, naming the gate).
 Run `Tool=MCP` cases only after this check too.
 
 ## Two execution paths (a plan can mix both)
 
 **A · Playwright cases (`Tool=PW`)** — the generated specs:
 ```bash
-BASE_URL=https://brse.ai npx playwright test --config .claude/skills/test-runner/playwright.config.mjs
-# (shortcut: BASE_URL=https://brse.ai npm test)
+BASE_URL=https://brse.ai npx playwright test --config "${CLAUDE_PLUGIN_ROOT}/skills/test-runner/playwright.config.mjs"
 ```
 Config derives the host from `BASE_URL` → runs `artifacts/<host>/tests`, writes
 `artifacts/<host>/{results.json,html-report,test-results}`.
 
 **B · chrome-devtools-MCP cases (`Tool=MCP`)** — for each `Tool=MCP` row in
 `artifacts/<host>/test-plan.md`, drive the live browser yourself with
-`mcp__chrome-devtools__*` (navigate_page, click, fill, take_snapshot,
+the chrome-devtools MCP tools (navigate_page, click, fill, take_snapshot,
 list_console_messages, list_network_requests), follow "Các bước", judge "Kỳ vọng",
 and record the verdict. **Run them without asking** — the approved plan is the permission.
+The server comes from this plugin, so the tools' full names carry a plugin prefix and end in
+`chrome-devtools__<tool>`; pick them by that suffix.
 
 **chrome-devtools MCP not connected?** Do not skip the case: drive the same steps yourself
 with a throwaway Playwright script in your scratchpad. Log in with `TEST_EMAIL` /
@@ -71,8 +72,7 @@ run instructions so it is not forgotten on a re-run.
 
 ## Gate + report back to the user
 ```bash
-BASE_URL=https://brse.ai node .claude/skills/test-runner/report.mjs
-# (shortcut: BASE_URL=https://brse.ai npm run gate)
+BASE_URL=https://brse.ai node "${CLAUDE_PLUGIN_ROOT}/skills/test-runner/report.mjs"
 ```
 `report.mjs` merges `results.json` + `mcp-results.json` → writes
 `artifacts/<host>/quality-gate.md` (in Vietnamese, for the tester) and prints a summary. It
@@ -131,7 +131,7 @@ Ask for it only when `gate.mjs` shows no unclassified failure. **Only after the 
   "Choose what to share" window — it is outside the DOM, so it never appears in a snapshot
   and no click can reach it; the promise simply never settles. Headless Playwright hits the
   same wall from the other side (no microphone → the source-language select renders
-  disabled). **Fix:** `.mcp.json` now launches Chrome with
+  disabled). **Fix:** the plugin's `.mcp.json` launches Chrome with
   `--chrome-arg=--use-fake-ui-for-media-stream` and
   `--chrome-arg=--auto-select-desktop-capture-source=Entire screen`, which was measured to
   carry dev.brse.ai's TC-023 from `Starting...` to the live meeting UI in ~1s. Flags apply

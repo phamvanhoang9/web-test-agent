@@ -9,7 +9,7 @@
 // state-changing, and aborts any request a page itself makes to one. A server-side redirect
 // to such a URL (from a link, an image or a fetch) is not intercepted.
 //
-// Usage:  node .claude/skills/test-designer/crawl.mjs <url> [--roles admin,user]
+// Usage:  node crawl.mjs <url> [--roles admin,user]
 //           [--max-pages 200] [--max-depth 5] [--concurrency 3] [--delay-ms 250]
 //           [--samples 3] [--slug-threshold 20] [--max-minutes 15]
 //           [--exclude <regex>]... [--allow <regex>]... [--no-bundle-routes]

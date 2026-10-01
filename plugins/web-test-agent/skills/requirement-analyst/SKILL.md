@@ -7,12 +7,12 @@ Turn requirement documents and the live site into a reviewable list of testable 
 Step 1 of the `web-test` workflow. Output: `artifacts/<host>/requirements.md`, which the tester
 approves (gate **G1**) before `test-designer` writes a single test case.
 
-Run from the project root. `<host>` = the URL's host (e.g. `dev.brse.ai`).
+Run from the tester's work folder. `<host>` = the URL's host (e.g. `dev.brse.ai`).
 
 ## Start
 
 ```bash
-node .claude/skills/web-test/gate.mjs https://app.example.com
+node "${CLAUDE_PLUGIN_ROOT}/skills/web-test/gate.mjs" https://app.example.com
 ```
 
 If `requirements.md` already exists, update it in place (see "Updating") — never copy the
@@ -52,7 +52,7 @@ has not changed since exploration — say so whenever you report it.
 
 **Default — Playwright headless** (fast, captures evidence to `artifacts/<host>/`):
 ```bash
-node .claude/skills/test-designer/explore.mjs https://brse.ai
+node "${CLAUDE_PLUGIN_ROOT}/skills/test-designer/explore.mjs" https://brse.ai
 ```
 Writes `exploration.md` (redirects, status, console errors, failed requests, outline
 of every field/button/link), `screenshot.png` (**open and look**), `console.json`,
@@ -61,7 +61,7 @@ of every field/button/link), `screenshot.png` (**open and look**), `console.json
 
 **Large site, or most of it behind a login — crawl first:**
 ```bash
-node .claude/skills/test-designer/crawl.mjs https://app.example.com
+node "${CLAUDE_PLUGIN_ROOT}/skills/test-designer/crawl.mjs" https://app.example.com
 ```
 Logs in as each role in `WEBTEST_ROLES` (credentials `TEST_<ROLE>_EMAIL` /
 `TEST_<ROLE>_PASSWORD`, or `TEST_EMAIL` / `TEST_PASSWORD` for the default role — from the
@@ -94,7 +94,7 @@ the redirect caveat under Gotchas. Limits:
 
 **When that's not enough — chrome-devtools MCP** (interactive, for auth-gated / heavy
 SPA / dynamic content): drive the real browser to understand the flow —
-`mcp__chrome-devtools__navigate_page`, `take_snapshot`, `click`, `fill`,
+the chrome-devtools MCP tools `navigate_page`, `take_snapshot`, `click`, `fill`,
 `list_console_messages`, `list_network_requests`.
 
 **Then look behind the clicks.** The crawler never clicks, so dialogs, menus and panels are
@@ -109,7 +109,7 @@ Only for a host with no file yet:
 
 ```bash
 mkdir -p artifacts/<host>
-cp -n .claude/skills/requirement-analyst/templates/requirements.template.md artifacts/<host>/requirements.md
+cp -n "${CLAUDE_PLUGIN_ROOT}/skills/requirement-analyst/templates/requirements.template.md" artifacts/<host>/requirements.md
 ```
 
 Worked example: `examples/brse.ai.requirements.md`. The Requirement table is read by scripts:

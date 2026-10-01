@@ -8,7 +8,7 @@ test-runner reports failures. Its proposal is what lets gate G3 pass: every fail
 classified in it. **Diagnoses on the live page, then proposes a fix and
 waits for your approval — it never auto-applies changes.**
 
-Run from the project root. Work per failing case from `artifacts/<host>/quality-gate.md`.
+Run from the tester's work folder. Work per failing case from `artifacts/<host>/quality-gate.md`.
 
 ## What to achieve
 For each failure, find the *real* cause by looking at the actual page, then decide:
@@ -25,7 +25,7 @@ so read it first — timing- or data-dependent failures may not reproduce on the
 
 ## Diagnose on the live page (chrome-devtools MCP)
 The Playwright error alone is often not enough — inspect reality:
-- `mcp__chrome-devtools__navigate_page` to the failing URL (set up auth via steps if needed)
+- chrome-devtools `navigate_page` to the failing URL (set up auth via steps if needed)
 - `take_snapshot` — the real accessibility tree → find the correct role/label/selector
 - `list_console_messages` / `list_network_requests` — JS errors or failing API calls behind the symptom
 - `click` / `fill` / `wait_for` to reproduce the step that failed and see what actually happens

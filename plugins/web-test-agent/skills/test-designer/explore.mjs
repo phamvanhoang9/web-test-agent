@@ -6,7 +6,7 @@
 // the network request log (failures flagged), and an outline of the
 // interactive elements (inputs, buttons, links) on the page.
 //
-// Usage:  node .claude/skills/test-designer/explore.mjs <url> [--steps steps.json]
+// Usage:  node explore.mjs <url> [--steps steps.json]
 //
 // Output: artifacts/<host>/exploration.md   (the report an agent reads)
 //         artifacts/<host>/screenshot.png   (full-page screenshot)
