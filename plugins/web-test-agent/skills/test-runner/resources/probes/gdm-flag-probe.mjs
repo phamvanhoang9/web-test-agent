@@ -1,7 +1,7 @@
 // Probe: can Chrome flags auto-approve the native getDisplayMedia (screen/tab share)
 // picker, so a Tool=MCP case that needs screen capture can run unattended?
 // Served over http://127.0.0.1 because getDisplayMedia needs a secure context.
-//   node .scratch/gdm-flag-probe.mjs [headed]
+//   node gdm-flag-probe.mjs [headed]     (run it in place, from a folder that has Playwright installed)
 import { createServer } from 'node:http';
 import { playwrightOrExit } from '../../../test-designer/lib/playwright.mjs';
 
