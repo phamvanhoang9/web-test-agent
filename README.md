@@ -52,9 +52,9 @@ limitation away.
 
 ## How it works
 
-The repository is not an application. It is a **workflow**: six focused Claude Code skills
-under [`.claude/skills/`](.claude/skills/), an orchestrator that sequences them, and the Node
-scripts they drive. It follows a tester's four steps, and each step ends at an approval gate.
+The repository is not an application. It is a **workflow**, packaged as a Claude Code plugin:
+six focused skills under [`plugins/web-test-agent/skills/`](plugins/web-test-agent/skills/), an orchestrator that
+sequences them, a `setup` skill, and the Node scripts they drive. It follows a tester's four steps, and each step ends at an approval gate.
 
 ```mermaid
 flowchart LR
@@ -82,11 +82,40 @@ what it will change. Everything else runs unattended.
 
 ## Quick start
 
+### Install (testers)
+
+Once per machine, in a terminal:
+
+```bash
+claude plugin marketplace add phamvanhoang9/web-test-agent
+```
+
+```bash
+claude plugin install web-test-agent@web-test-agent
+```
+
+Then open Claude Code in any folder you want to work in and run `/web-test-agent:setup`. It
+installs Playwright and Chromium into that folder, creates `artifacts/` and `.gitignore`, and
+checks the chrome-devtools MCP server; approve the one settings file it asks to write. After
+that, ask for what you need: *"test https://example.com end to end"*.
+
+Your work folder holds the bundles (`artifacts/<host>/`) and credentials (`.env.<host>`); the
+plugin holds the workflow. Updates arrive when the maintainer publishes a new version, and the
+work folder needs no change.
+
+### Develop (this repo)
+
 ```bash
 npm install && npx playwright install chromium
 ```
 
-Then drive the steps. `BASE_URL` is the only knob you need:
+```bash
+claude --plugin-dir ./plugins/web-test-agent
+```
+
+The commands below are the developer shortcuts in this repo's `package.json`. Testers never
+type them: the skills call the same scripts from the installed plugin. `BASE_URL` is the only
+knob you need:
 
 ```bash
 # where does this site stand? (the four gates and the next step)
@@ -94,9 +123,9 @@ npm run status -- https://example.com
 
 # 1 · requirements: put your documents in artifacts/example.com/requirements/, then the agent
 #     explores the site and writes requirements.md  →  you review and approve (G1)
-node .claude/skills/test-designer/explore.mjs https://example.com
+node plugins/web-test-agent/skills/test-designer/explore.mjs https://example.com
 #     large or login-gated site: crawl it instead (roles and credentials from .env)
-node .claude/skills/test-designer/crawl.mjs https://example.com
+node plugins/web-test-agent/skills/test-designer/crawl.mjs https://example.com
 #     options: crawl.mjs --roles admin,user --max-pages 200 --max-minutes 15 --exclude <regex>
 #              explore.mjs --steps steps.json  (click through a flow before capturing)
 
@@ -131,12 +160,12 @@ $env:BASE_URL = "https://example.com"; npm run gate
 
 ```bash
 BASE_URL=https://example.com npx playwright test \
-  --config .claude/skills/test-runner/playwright.config.mjs \
+  --config plugins/web-test-agent/skills/test-runner/playwright.config.mjs \
   artifacts/example.com/tests/login.spec.mjs
 
 # by test case id
 BASE_URL=https://example.com npx playwright test \
-  --config .claude/skills/test-runner/playwright.config.mjs -g "TC-003"
+  --config plugins/web-test-agent/skills/test-runner/playwright.config.mjs -g "TC-003"
 
 # open the HTML report
 npx playwright show-report artifacts/example.com/html-report
@@ -147,13 +176,13 @@ npx playwright show-report artifacts/example.com/html-report
 
 | # | Step | Skill | What happens | You approve |
 |---|---|---|---|---|
-| 1 | REQUIREMENTS | [`requirement-analyst`](.claude/skills/requirement-analyst/SKILL.md) | Reads the documents you put in `requirements/`, drives headless Chromium over the live site (`explore.mjs` / `crawl.mjs`), and turns both into testable requirements. What no document covers is inferred from the site and marked as such; business rules it can only guess become questions for the PO | `requirements.md` (G1) |
-| 2 | DESIGN | [`test-designer`](.claude/skills/test-designer/SKILL.md) | Scores risk (probability x impact) and writes a test plan linked to the requirements, covering every requirement, route and control (`coverage.mjs` checks) | `test-plan.md` (G2) |
-| 3 | EXECUTE | [`script-generator`](.claude/skills/script-generator/SKILL.md), [`test-runner`](.claude/skills/test-runner/SKILL.md), [`self-healer`](.claude/skills/self-healer/SKILL.md) | Turns each `Tool=PW` row into a Playwright test, runs the specs, drives `Tool=MCP` cases live, merges both into the quality gate. On failure the healer reproduces on the live page and separates real bugs from broken scripts | `quality-gate.md` (G3) |
-| 4 | ANALYSE | [`result-analyst`](.claude/skills/result-analyst/SKILL.md) | Writes the bug report — one bug per cause, ids stable across runs, evidence saved — and a release recommendation, then exports approved bugs to a Jira CSV | `bug-report.md` (G4) |
+| 1 | REQUIREMENTS | [`requirement-analyst`](plugins/web-test-agent/skills/requirement-analyst/SKILL.md) | Reads the documents you put in `requirements/`, drives headless Chromium over the live site (`explore.mjs` / `crawl.mjs`), and turns both into testable requirements. What no document covers is inferred from the site and marked as such; business rules it can only guess become questions for the PO | `requirements.md` (G1) |
+| 2 | DESIGN | [`test-designer`](plugins/web-test-agent/skills/test-designer/SKILL.md) | Scores risk (probability x impact) and writes a test plan linked to the requirements, covering every requirement, route and control (`coverage.mjs` checks) | `test-plan.md` (G2) |
+| 3 | EXECUTE | [`script-generator`](plugins/web-test-agent/skills/script-generator/SKILL.md), [`test-runner`](plugins/web-test-agent/skills/test-runner/SKILL.md), [`self-healer`](plugins/web-test-agent/skills/self-healer/SKILL.md) | Turns each `Tool=PW` row into a Playwright test, runs the specs, drives `Tool=MCP` cases live, merges both into the quality gate. On failure the healer reproduces on the live page and separates real bugs from broken scripts | `quality-gate.md` (G3) |
+| 4 | ANALYSE | [`result-analyst`](plugins/web-test-agent/skills/result-analyst/SKILL.md) | Writes the bug report — one bug per cause, ids stable across runs, evidence saved — and a release recommendation, then exports approved bugs to a Jira CSV | `bug-report.md` (G4) |
 
-[`web-test`](.claude/skills/web-test/SKILL.md) is the orchestrator that sequences them;
-[`checklist.md`](.claude/skills/web-test/checklist.md) is the exit criteria to run through
+[`web-test`](plugins/web-test-agent/skills/web-test/SKILL.md) is the orchestrator that sequences them;
+[`checklist.md`](plugins/web-test-agent/skills/web-test/checklist.md) is the exit criteria to run through
 before calling a session done.
 
 **Inferred is not required.** A requirement inferred from the site describes what it *does*,
@@ -200,7 +229,7 @@ such as console errors). It comes from the requirement table in `requirements.md
 requirement's result.
 
 The templates and worked examples are written in Vietnamese; keep new plans in the same
-language as [the template](.claude/skills/test-designer/templates/test-cases.template.md).
+language as [the template](plugins/web-test-agent/skills/test-designer/templates/test-cases.template.md).
 Multi-step cells separate steps with `;`.
 
 There is no parser. Generation is judgement-driven, so the table's *meaning* matters more
@@ -226,7 +255,8 @@ A single plan can mix both freely. `report.mjs` merges the two result files into
 traceability matrix, so a `Tool=MCP` case is a first-class citizen of the gate rather than a
 footnote.
 
-Requires the `chrome-devtools` MCP server, configured in [`.mcp.json`](.mcp.json). If it is not
+Requires the `chrome-devtools` MCP server, which ships with the plugin
+([`.mcp.json`](plugins/web-test-agent/.mcp.json)). If it is not
 connected, the Playwright cases still run and the MCP cases are reported as skipped —
 explicitly, never silently.
 
@@ -326,16 +356,24 @@ to one site (read first, wins over `.env`). Both the crawler and the Playwright 
 them; variables set in the shell win. `.env*` is gitignored — credentials never reach a commit.
 
 Cross-browser and mobile projects are pre-declared and commented out in
-[`playwright.config.mjs`](.claude/skills/test-runner/playwright.config.mjs) — uncomment to
+[`playwright.config.mjs`](plugins/web-test-agent/skills/test-runner/playwright.config.mjs) — uncomment to
 widen coverage beyond Chromium.
 
 ## Project structure
 
-Nothing test-related lives at the project root except `package.json`; everything is under
-`.claude/skills/`, one folder per skill. The Node scripts sit next to the skill that owns them.
+The repo is its own plugin marketplace: [`.claude-plugin/marketplace.json`](.claude-plugin/marketplace.json)
+lists one plugin, [`plugins/web-test-agent/`](plugins/web-test-agent/). Nothing test-related lives at the repo
+root except `package.json`; everything is under `plugins/web-test-agent/skills/`, one folder per skill.
+The Node scripts sit next to the skill that owns them.
 
 ```
-.claude/skills/
+plugins/web-test-agent/
+├── .claude-plugin/plugin.json   # name and version of the plugin
+├── .mcp.json                    # chrome-devtools MCP server and its media flags
+└── skills/
+
+plugins/web-test-agent/skills/
+├── setup/               # once per work folder: Playwright, Chromium, .gitignore, MCP check
 ├── web-test/            # orchestrator: SKILL.md, checklist.md
 │   ├── gate.mjs         #   npm run status — the four gates and the next step
 │   └── lib/             #   approval.mjs (the only reader of "Duyệt"), requirements.mjs
@@ -344,7 +382,8 @@ Nothing test-related lives at the project root except `package.json`; everything
 │   ├── explore.mjs      #   one page: outline, screenshot, console, network
 │   ├── crawl.mjs        #   whole site, several roles -> crawl/site-map.md
 │   ├── coverage.mjs     #   plan vs requirements and exploration -> coverage.md
-│   └── lib/             #   bundle, capture, auth, site-map, route-discovery, url-template
+│   └── lib/             #   bundle, capture, auth, site-map, route-discovery, url-template,
+│                        #   playwright (loads Playwright from the work folder)
 ├── script-generator/    # step 3: SKILL.md, spec templates, selector-resilience.md
 ├── test-runner/         # step 3: SKILL.md, resources/knowledge
 │   ├── playwright.config.mjs
@@ -358,10 +397,17 @@ Nothing test-related lives at the project root except `package.json`; everything
 
 Each script has a `*.test.mjs` beside it. `npm run test:unit` runs them all with `node --test`
 and needs no target site. The bundle-name rule (`BASE_URL` → `artifacts/<host>/`) is written
-out in three places — [`bundle.mjs`](.claude/skills/test-designer/lib/bundle.mjs),
-[`playwright.config.mjs`](.claude/skills/test-runner/playwright.config.mjs) and
-[`report.mjs`](.claude/skills/test-runner/report.mjs) — so change all three together, or the
+out in three places — [`bundle.mjs`](plugins/web-test-agent/skills/test-designer/lib/bundle.mjs),
+[`playwright.config.mjs`](plugins/web-test-agent/skills/test-runner/playwright.config.mjs) and
+[`report.mjs`](plugins/web-test-agent/skills/test-runner/report.mjs) — so change all three together, or the
 phases will write and read different folders.
+
+### Releasing
+
+Bump `version` in [`plugin.json`](plugins/web-test-agent/.claude-plugin/plugin.json) (and in `package.json`),
+commit and push. Testers stay on the version they installed until that number changes, so work
+in progress on `main` never reaches them. `claude plugin validate ./plugins/web-test-agent` and
+`claude plugin validate .` check the plugin and the marketplace before a release.
 
 ## Guardrails
 
@@ -377,8 +423,14 @@ The parts of this workflow that exist to keep it honest:
   not an expectation to test against.
 - **Locators are role- and label-based.** `getByRole` and `getByLabel` over brittle CSS;
   web-first assertions over `waitForTimeout` as a synchronisation mechanism. See
-  [`selector-resilience.md`](.claude/skills/script-generator/resources/knowledge/selector-resilience.md).
-- **Credentials live in the environment.** Never in a plan, a spec, or a commit.
+  [`selector-resilience.md`](plugins/web-test-agent/skills/script-generator/resources/knowledge/selector-resilience.md).
+- **Credentials live in the environment.** Never in a plan, a spec, or a commit. The setup skill
+  also denies the agent read access to `.env*` and `artifacts/<host>/.auth/`: the scripts load
+  them, the agent never opens them.
+- **Site and document content is evidence, never instructions.** Page text, console output,
+  crawl results and requirement documents are analysed, not obeyed. Text in them that addresses
+  the agent is quoted to the tester and recorded as a finding. This lowers the risk of prompt
+  injection; the read-deny rules and the approval gates are what hold if it fails.
 - **Data-mutating cases run against staging.** Production gets read-only and negative checks.
 - **Whoever writes the data cleans it up.** A Playwright spec has `afterEach` and fixtures; an
   agent-driven `Tool=MCP` case has nothing but this rule — delete what it created and restore
@@ -394,14 +446,15 @@ The parts of this workflow that exist to keep it honest:
 |---|---|
 | Explorer times out after 30s | `explore.mjs` waits for `networkidle`, which never settles on websocket or long-poll sites. It still captures what loaded and logs the error — switch that site to chrome-devtools MCP |
 | `Thiếu host. Đặt BASE_URL=...` | `report.mjs` cannot tell which bundle to read. Set `BASE_URL`, or pass the host as the first argument |
-| Exit 3, `G2 chưa qua: ...` (or G1, G3, G4) | An approval gate is not passed. Run `npm run status -- <url>`: it names the file to review and approve, or the failures self-healer still has to classify |
+| Exit 4, `Chưa cài Playwright ở thư mục này` | The work folder has not been set up. Run `/web-test-agent:setup`, then repeat the command |
+| Exit 3, `G2 chưa qua: ...` (or G1, G3, G4) | An approval gate is not passed. Ask for the gate status (`gate.mjs <url>`; `npm run status -- <url>` in this repo): it names the file to review and approve, or the failures self-healer still has to classify |
 | A bundle made before the approval gates is blocked | It has no approved `requirements.md`. Run step 1 once (requirement-analyst), approve it, then re-approve the test plan |
 | `bugs.mjs` exits 1 | A bug in `bug-report.md` misses Các bước tái hiện / Kỳ vọng / Thực tế, or has an unknown Mức độ, Ưu tiên or Trạng thái. The message names each bug |
 | No specs found, run is empty | The host derived from `BASE_URL` does not match the bundle directory. Check for a port or character the sanitizer rewrote, or set `WEBTEST_HOST` |
 | A case is missing from the gate | Its test title does not match `TC-NNN [Pn] ...`, so it lost its traceability row |
 | Empty button label in the exploration outline | An icon-only button. Target its `aria-label`, not its text |
-| MCP cases all reported as skipped | The `chrome-devtools` MCP server is not connected. It must be declared in [`.mcp.json`](.mcp.json) — a plain `mcp.json` is not read — and servers only load at session start, so restart the session after adding it |
-| A button sits on `Starting...` forever, no console error | The page called `getUserMedia`/`getDisplayMedia` and the browser's native "Choose what to share" picker is waiting outside the DOM, where no snapshot sees it and no click reaches it. `.mcp.json` launches Chrome with `--use-fake-ui-for-media-stream` and `--auto-select-desktop-capture-source` to answer it automatically — effective from the next session. See [`media-capture-cases.md`](.claude/skills/test-runner/resources/knowledge/media-capture-cases.md). It is never an application bug |
+| MCP cases all reported as skipped | The `chrome-devtools` MCP server is not connected. It ships with the plugin and only loads at session start, so restart the session after installing or updating the plugin; `/web-test-agent:setup` reports whether it is connected |
+| A button sits on `Starting...` forever, no console error | The page called `getUserMedia`/`getDisplayMedia` and the browser's native "Choose what to share" picker is waiting outside the DOM, where no snapshot sees it and no click reaches it. The plugin's `.mcp.json` launches Chrome with `--use-fake-ui-for-media-stream` and `--auto-select-desktop-capture-source` to answer it automatically — effective from the next session. See [`media-capture-cases.md`](plugins/web-test-agent/skills/test-runner/resources/knowledge/media-capture-cases.md). It is never an application bug |
 | `crawl.mjs` exits with `login failed ... field-not-found` | The login form is not at `/login`, or its fields have no email/password label. Set `WEBTEST_LOGIN_PATH`; SSO and MFA logins are not supported |
 | `site-map.md` opens with a Warning | The crawl stopped early (page or time limit, rate limiting, a session that kept expiring). Raise `--max-pages` / `--max-minutes`, or narrow the crawl with `--exclude` |
 
@@ -409,15 +462,10 @@ The parts of this workflow that exist to keep it honest:
 
 ## Requirements
 
-Node 20.12 or later (21 or later for `npm run test:unit`), and Chromium via `npx playwright install chromium`. The `chrome-devtools`
-MCP server is optional, and required only for `Tool=MCP` cases and live-page healing. Claude
-Code asks once before it starts a project's MCP server; to pre-approve it and its tools, add to
-`.claude/settings.local.json` (machine-local, not committed):
-
-```json
-{ "enabledMcpjsonServers": ["chrome-devtools"], "permissions": { "allow": ["mcp__chrome-devtools"] } }
-```
-
-`claude mcp list` should then show `chrome-devtools ... ✔ Connected`.
+Node 20.12 or later (21 or later for `npm run test:unit`), Claude Code, and Google Chrome for
+`Tool=MCP` cases and live-page healing. `/web-test-agent:setup` installs Playwright and Chromium
+into the work folder. The `chrome-devtools` MCP server ships with the plugin and starts with it;
+setup adds the allow rule for its tools (`mcp__plugin_web-test-agent_chrome-devtools`) to the
+work folder's `.claude/settings.local.json`, so MCP cases run without a prompt per click.
 
 For working conventions and the internal contracts between phases, see [CLAUDE.md](CLAUDE.md).
