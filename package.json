@@ -1,6 +1,6 @@
 {
   "name": "web-test-agent",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "description": "Development workspace for the web-test-agent Claude Code plugin (plugins/web-test-agent/). Testers install the plugin; this package.json only serves unit tests and local runs.",
   "type": "module",
   "private": true,

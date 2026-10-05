@@ -4,7 +4,6 @@
 //   BASE_URL=https://brse.ai npx playwright test --config <plugin>/skills/test-runner/playwright.config.mjs
 //   → testDir artifacts/brse.ai/tests, outputs artifacts/brse.ai/{html-report,results.json,test-results}
 import path from 'node:path';
-import { loadEnv } from '../test-designer/lib/bundle.mjs';
 import { playwrightOrExit } from '../test-designer/lib/playwright.mjs';
 import { requireGatesOrExit } from '../web-test/lib/approval.mjs';
 
@@ -19,8 +18,10 @@ const base = process.env.BASE_URL;
 const rawHost = process.env.WEBTEST_HOST || (base ? new URL(base).host : '');
 const host = rawHost.replace(/[^a-z0-9.-]/gi, '_');
 const outDir = path.join(root, 'artifacts', host); // host '' → artifacts/ (no specs found)
-// Credentials (TEST_EMAIL/TEST_PASSWORD...) from <host>.env, then .env; the shell wins.
-loadEnv(host, root);
+// Saved sessions (login.mjs) live in artifacts/<host>/.auth/<role>.json. A spec that needs a
+// signed-in user opts in with test.use({ storageState: `${process.env.WEBTEST_AUTH_DIR}/<role>.json` });
+// workers inherit this variable.
+process.env.WEBTEST_AUTH_DIR = path.join(outDir, '.auth');
 // Gate G2: specs run only against a test plan the tester approved (after requirements.md).
 // Prints what blocks it and exits 3 — "blocked", not "tests failed" — before opening a browser.
 if (host) requireGatesOrExit(outDir, 'G2');

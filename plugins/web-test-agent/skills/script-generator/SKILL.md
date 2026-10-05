@@ -38,6 +38,13 @@ Worked example: `examples/brse-login.spec.mjs` (maps TC-001…TC-005 from the br
 
 ## Notes
 - Specs use `baseURL` (test-runner sets it from `BASE_URL`), so navigate with `page.goto('/')`, `page.goto('/login')`.
+- **Signed-in cases:** the tester signs in by hand (`login.mjs`), and the session is saved to
+  `artifacts/<host>/.auth/<role>.json`; the test-runner config exports that folder as
+  `process.env.WEBTEST_AUTH_DIR`. Opt in per file or `describe`:
+  `test.use({ storageState: `${process.env.WEBTEST_AUTH_DIR}/default.json` })` (another role: its
+  own file name). Cases that must start signed out, such as the login form itself, use
+  `test.use({ storageState: { cookies: [], origins: [] } })`. A spec never types or reads a real
+  password; the case "wrong password is rejected" fills an obviously fake one.
 - Group a site's tests by area into one or a few `*.spec.mjs` files under `artifacts/<host>/tests/`.
 - Don't invent cases not in the table — if the plan misses something, send it back to test-designer.
 - The REQ column is not encoded in specs: the plan links TCs to requirements, and `report.mjs`

@@ -7,11 +7,10 @@ playwright-report/
 # its risks, its findings — so bundles stay local and are never committed.
 artifacts/
 
-# --- secrets — never commit; credentials come from the environment ---
+# --- secrets — never commit ---
 .env
 .env.*
 *.env
-!.env.example
 
 # --- per-machine state, not project config ---
 .claude/settings.local.json
