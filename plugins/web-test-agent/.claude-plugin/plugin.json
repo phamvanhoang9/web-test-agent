@@ -1,7 +1,7 @@
 {
   "name": "web-test-agent",
   "displayName": "Web Test Agent",
-  "version": "2.1.0",
+  "version": "3.0.0",
   "description": "E2E black-box web testing following a tester's process: requirement analysis, test design, execution, result analysis, each ending at a tester approval gate.",
   "author": { "name": "stevehoang" },
   "repository": "https://github.com/phamvanhoang9/web-test-agent",
