@@ -46,6 +46,7 @@ node_modules/
 artifacts/
 .env
 .env.*
+*.env
 !.env.example
 ```
 
@@ -55,7 +56,7 @@ mkdir -p artifacts
 ```
 If `.env.example` does not exist, create it with:
 ```
-# Copy to .env.<host> (for example .env.app.example.com) and fill in a TEST account.
+# Copy to <host>.env (for example app.example.com.env) and fill in a TEST account.
 TEST_EMAIL=
 TEST_PASSWORD=
 ```
@@ -74,8 +75,8 @@ Look at the tools available in this session for one whose name ends in
 Edit `.claude/settings.local.json` of the current folder. Create it as
 `{ "permissions": { "allow": [], "deny": [] } }` if it does not exist; otherwise keep everything
 already in it and add only the rules that are missing.
-- **Always**, in `permissions.deny`: `Read(./.env)`, `Read(./.env.*)` and
-  `Read(./artifacts/**/.auth/**)`. Credentials and saved sessions are loaded by the scripts;
+- **Always**, in `permissions.deny`: `Read(./.env)`, `Read(./.env.*)`, `Read(./*.env)`
+  and `Read(./artifacts/**/.auth/**)`. Credentials and saved sessions are loaded by the scripts;
   the agent never needs to open them, and a hostile page must not be able to talk it into it.
 - **Only when step 7 found the server**, in `permissions.allow`: the rule from step 7, so MCP
   cases run without a prompt per click.

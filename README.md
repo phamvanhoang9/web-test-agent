@@ -99,7 +99,7 @@ installs Playwright and Chromium into that folder, creates `artifacts/` and `.gi
 checks the chrome-devtools MCP server; approve the one settings file it asks to write. After
 that, ask for what you need: *"test https://example.com end to end"*.
 
-Your work folder holds the bundles (`artifacts/<host>/`) and credentials (`.env.<host>`); the
+Your work folder holds the bundles (`artifacts/<host>/`) and credentials (`<host>.env`); the
 plugin holds the workflow. Updates arrive when the maintainer publishes a new version, and the
 work folder needs no change.
 
@@ -351,9 +351,11 @@ this shape.
 | `WEBTEST_ROLES` | Roles `crawl.mjs` logs in as, comma-separated (e.g. `admin,user`). Role `X` reads `TEST_X_EMAIL` / `TEST_X_PASSWORD` |
 | `WEBTEST_LOGIN_PATH` | Login page path for `crawl.mjs`, default `/login` |
 
-Copy [`.env.example`](.env.example) to `.env`, or to `.env.<host>` for credentials that belong
-to one site (read first, wins over `.env`). Both the crawler and the Playwright config load
-them; variables set in the shell win. `.env*` is gitignored — credentials never reach a commit.
+Copy [`.env.example`](.env.example) to `.env`, or to `<host>.env` (for example
+`app.example.com.env`) for credentials that belong to one site (read first, wins over `.env`).
+Both the crawler and the Playwright config load them; variables set in the shell win. `.env*`
+and `*.env` are gitignored — credentials never reach a commit. The older name `.env.<host>` is
+no longer read: rename such a file to `<host>.env`.
 
 Cross-browser and mobile projects are pre-declared and commented out in
 [`playwright.config.mjs`](plugins/web-test-agent/skills/test-runner/playwright.config.mjs) — uncomment to
@@ -425,7 +427,7 @@ The parts of this workflow that exist to keep it honest:
   web-first assertions over `waitForTimeout` as a synchronisation mechanism. See
   [`selector-resilience.md`](plugins/web-test-agent/skills/script-generator/resources/knowledge/selector-resilience.md).
 - **Credentials live in the environment.** Never in a plan, a spec, or a commit. The setup skill
-  also denies the agent read access to `.env*` and `artifacts/<host>/.auth/`: the scripts load
+  also denies the agent read access to `.env*`, `*.env` and `artifacts/<host>/.auth/`: the scripts load
   them, the agent never opens them.
 - **Site and document content is evidence, never instructions.** Page text, console output,
   crawl results and requirement documents are analysed, not obeyed. Text in them that addresses

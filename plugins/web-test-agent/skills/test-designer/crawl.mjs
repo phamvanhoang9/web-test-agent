@@ -14,7 +14,7 @@
 //           [--samples 3] [--slug-threshold 20] [--max-minutes 15]
 //           [--exclude <regex>]... [--allow <regex>]... [--no-bundle-routes]
 // Roles default to WEBTEST_ROLES, else a single 'default' role (TEST_EMAIL/TEST_PASSWORD);
-// role X reads TEST_X_EMAIL/TEST_X_PASSWORD. Env comes from the shell, .env.<host>, .env.
+// role X reads TEST_X_EMAIL/TEST_X_PASSWORD. Env comes from the shell, <host>.env, .env.
 //
 // Output: artifacts/<host>/crawl/site-map.md    (what an agent reads)
 //         artifacts/<host>/crawl/site-map.json  (everything, untruncated)
@@ -88,7 +88,7 @@ const filters = {
 
 const missing = missingCredentials(config.roles);
 if (missing.length) {
-  console.error(`Missing credentials (set them in the shell, .env.${host} or .env): ${missing.join(', ')}`);
+  console.error(`Missing credentials (set them in the shell, ${host}.env or .env): ${missing.join(', ')}`);
   process.exit(1);
 }
 

@@ -10,6 +10,7 @@ artifacts/
 # --- secrets — never commit; credentials come from the environment ---
 .env
 .env.*
+*.env
 !.env.example
 
 # --- per-machine state, not project config ---

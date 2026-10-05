@@ -19,7 +19,7 @@ const base = process.env.BASE_URL;
 const rawHost = process.env.WEBTEST_HOST || (base ? new URL(base).host : '');
 const host = rawHost.replace(/[^a-z0-9.-]/gi, '_');
 const outDir = path.join(root, 'artifacts', host); // host '' → artifacts/ (no specs found)
-// Credentials (TEST_EMAIL/TEST_PASSWORD...) from .env.<host>, then .env; the shell wins.
+// Credentials (TEST_EMAIL/TEST_PASSWORD...) from <host>.env, then .env; the shell wins.
 loadEnv(host, root);
 // Gate G2: specs run only against a test plan the tester approved (after requirements.md).
 // Prints what blocks it and exits 3 — "blocked", not "tests failed" — before opening a browser.

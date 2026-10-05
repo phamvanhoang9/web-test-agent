@@ -20,11 +20,13 @@ export function bundleDir(url) {
 }
 
 /**
- * Load .env.<host>, then .env, from `root` into process.env without overwriting anything
- * already set. Precedence: shell > .env.<host> > .env. Missing files are skipped.
+ * Load <host>.env, then .env, from `root` into process.env without overwriting anything
+ * already set. Precedence: shell > <host>.env > .env. Missing files are skipped.
+ * The host comes first in the name because Windows reads the last dot-part as the file
+ * type: .env.app.example.com would show up as a program.
  */
 export function loadEnv(host, root = process.cwd()) {
-  for (const name of [`.env.${host}`, '.env']) {
+  for (const name of [`${host}.env`, '.env']) {
     const file = path.join(root, name);
     if (!existsSync(file)) continue;
     for (const [key, value] of Object.entries(parseEnv(readFileSync(file, 'utf8')))) {
