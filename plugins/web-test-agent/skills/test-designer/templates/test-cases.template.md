@@ -12,7 +12,7 @@
 ## Phạm vi & môi trường
 - Target: `<URL>`
 - Môi trường: <staging | production>  (test ghi/sửa dữ liệu → dùng staging)
-- Tài khoản test: <có / không — không dán mật khẩu thật; dùng env TEST_EMAIL/TEST_PASSWORD>
+- Tài khoản test: <có / không — không ghi mật khẩu ở đâu cả; tester tự đăng nhập trên cửa sổ trình duyệt>
 
 ## Route / chức năng không test (và lý do)
 > Mọi route và mọi nút/ô nhập/link mà exploration tìm thấy phải có TC, hoặc nằm ở bảng này.

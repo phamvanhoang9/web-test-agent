@@ -1,20 +1,21 @@
 #!/usr/bin/env node
 // crawl.mjs — multi-page, multi-role exploration driver for the test-designer skill (phase 1).
 //
-// Logs each role in, walks same-origin links breadth-first (plus sitemap.xml and routes
-// declared in the SPA's JS bundle), groups URLs
+// Reuses each role's saved session (login.mjs), walks same-origin links breadth-first (plus
+// sitemap.xml and routes declared in the SPA's JS bundle), groups URLs
 // into route templates, captures one representative page per template, probes files
 // without downloading them, then checks which role can open which template.
 // Read-only by design: it follows links, never clicks or submits, skips URLs that look
 // state-changing, and aborts any request a page itself makes to one. A server-side redirect
 // to such a URL (from a link, an image or a fetch) is not intercepted.
 //
-// Usage:  node crawl.mjs <url> [--roles admin,user]
+// Usage:  node crawl.mjs <url> [--roles admin,user] [--login-path /login]
 //           [--max-pages 200] [--max-depth 5] [--concurrency 3] [--delay-ms 250]
 //           [--samples 3] [--slug-threshold 20] [--max-minutes 15]
 //           [--exclude <regex>]... [--allow <regex>]... [--no-bundle-routes]
-// Roles default to WEBTEST_ROLES, else a single 'default' role (TEST_EMAIL/TEST_PASSWORD);
-// role X reads TEST_X_EMAIL/TEST_X_PASSWORD. Env comes from the shell, <host>.env, .env.
+// Roles default to a single 'default' role. Each needs artifacts/<host>/.auth/<role>.json,
+// which the tester creates by signing in with `login.mjs <url> --role <role>`; the crawler
+// never sees a password. A session that dies mid-crawl stops that role (sign in again, re-crawl).
 //
 // Output: artifacts/<host>/crawl/site-map.md    (what an agent reads)
 //         artifacts/<host>/crawl/site-map.json  (everything, untruncated)
@@ -22,11 +23,11 @@
 //         artifacts/<host>/.auth/<role>.json    (saved sessions — they contain tokens)
 
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import { login, LoginError, missingCredentials } from './lib/auth.mjs';
-import { bundleDir, hostOf, loadEnv } from './lib/bundle.mjs';
+import { missingSessions, sessionPath } from './lib/auth.mjs';
+import { bundleDir, hostOf } from './lib/bundle.mjs';
 import { capturePage, probeFile, renderExploration } from './lib/capture.mjs';
 import { playwrightOrExit } from './lib/playwright.mjs';
 import { extractRoutes, instantiate, scriptUrls } from './lib/route-discovery.mjs';
@@ -36,7 +37,8 @@ import { isFileUrl, isUnsafe, normalizeUrl, TemplateIndex } from './lib/url-temp
 const { values: args, positionals } = parseArgs({
   allowPositionals: true,
   options: {
-    roles: { type: 'string' },
+    roles: { type: 'string', default: 'default' },
+    'login-path': { type: 'string', default: '/login' },
     'max-pages': { type: 'string', default: '200' },
     'max-depth': { type: 'string', default: '5' },
     concurrency: { type: 'string', default: '3' },
@@ -51,14 +53,13 @@ const { values: args, positionals } = parseArgs({
 });
 const startUrl = positionals[0];
 if (!startUrl) {
-  console.error('Usage: node crawl.mjs <url> [--roles admin,user] [--max-pages 200] [--max-minutes 15] ...');
+  console.error('Usage: node crawl.mjs <url> [--roles admin,user] [--login-path /login] [--max-pages 200] ...');
   process.exit(1);
 }
 
 const { chromium } = playwrightOrExit();
 
 const host = hostOf(startUrl);
-loadEnv(host);
 
 const limits = {
   maxPages: Number(args['max-pages']),
@@ -74,9 +75,9 @@ if (Object.values(limits).some((n) => !Number.isFinite(n) || n < 0) || limits.co
   process.exit(1);
 }
 const config = {
-  roles: (args.roles || process.env.WEBTEST_ROLES || 'default').split(',').map((r) => r.trim()).filter(Boolean),
+  roles: args.roles.split(',').map((r) => r.trim()).filter(Boolean),
   ...limits,
-  loginPath: process.env.WEBTEST_LOGIN_PATH || '/login',
+  loginPath: args['login-path'],
   exclude: args.exclude,
   allow: args.allow,
   bundleRoutes: !args['no-bundle-routes'],
@@ -86,16 +87,18 @@ const filters = {
   allow: config.allow.map((pattern) => new RegExp(pattern, 'i')),
 };
 
-const missing = missingCredentials(config.roles);
-if (missing.length) {
-  console.error(`Missing credentials (set them in the shell, ${host}.env or .env): ${missing.join(', ')}`);
-  process.exit(1);
-}
-
 const origin = new URL(startUrl).origin;
 const outDir = bundleDir(startUrl);
 const crawlDir = path.join(outDir, 'crawl');
 const stateDir = path.join(outDir, '.auth');
+const unsigned = missingSessions(stateDir, config.roles);
+if (unsigned.length) {
+  console.error(`No saved session for role(s): ${unsigned.join(', ')}. Sign each in first:`);
+  for (const role of unsigned) {
+    console.error(`  node login.mjs ${startUrl} --role ${role} --login-path ${config.loginPath}`);
+  }
+  process.exit(1);
+}
 const index = new TemplateIndex({ slugThreshold: config.slugThreshold });
 const state = {
   baseUrl: startUrl,
@@ -316,13 +319,11 @@ async function crawlRole(browser, role, statePaths) {
   const queue = [];
   const queued = new Set();
   const samplesTaken = new Map();
-  const expired = [];
+  let loginRedirects = 0;
   let visited = 0;
   let active = 0;
   let delayMs = config.delayMs;
-  let sessionEpoch = 0;
-  let relogged = false;
-  let reloginRunning = null;
+  let sessionCheck = null;
   let roleStop = null;
 
   const enqueue = (url, depth) => {
@@ -345,56 +346,28 @@ async function crawlRole(browser, role, statePaths) {
     }
     return added;
   };
-  // Undo a visit made with a dead session and queue the URL again.
-  const forget = (item, record) => {
-    state.visits.splice(state.visits.indexOf(record), 1);
-    samplesTaken.set(item.sampleKey, samplesTaken.get(item.sampleKey) - 1);
-    visited -= 1;
-    queue.push(item);
-  };
-
-  async function relogin() {
-    relogged = true;
-    const statePath = await login(browser, { baseUrl: origin, role, stateDir, loginPath: config.loginPath });
-    await context.clearCookies();
-    await context.addCookies(JSON.parse(readFileSync(statePath, 'utf8')).cookies);
-    sessionEpoch += 1;
-    for (const { item, record } of expired.splice(0)) forget(item, record);
-  }
-
   // Three login redirects in a row mean either a dead session or pages this role may not
   // open (many frameworks answer "forbidden" with a redirect to login). If the start page
-  // still loads, it is the latter: keep those records as access findings. Otherwise log in
-  // again once and revisit the pages; give up if the session dies a second time.
-  async function renewSession() {
+  // still loads, it is the latter: keep those records as access findings. Otherwise the
+  // session is dead and only the tester can sign in again: stop the role.
+  async function checkSession() {
     const check = await context.request
       .get(startUrl, { maxRedirects: 0, failOnStatusCode: false, timeout: 15_000 })
       .catch(() => null);
-    if (check?.ok()) {
-      expired.length = 0;
-      return;
-    }
-    if (relogged) {
-      roleStop = `session for role ${role} keeps expiring — stopped, coverage incomplete`;
-      return;
-    }
-    await relogin().catch((error) => {
-      roleStop = `re-login for role ${role} failed (${error instanceof LoginError ? error.step : error.message}) — coverage incomplete`;
-    });
+    if (check?.ok()) loginRedirects = 0;
+    else roleStop = `session for role ${role} expired — sign in again with login.mjs and re-crawl, coverage incomplete`;
   }
 
-  async function onLoginRedirect(item, record, startedEpoch) {
-    if (startedEpoch < sessionEpoch) return forget(item, record);
-    expired.push({ item, record });
-    if (expired.length < 3 || reloginRunning) return undefined;
-    reloginRunning = renewSession().finally(() => {
-      reloginRunning = null;
+  function onLoginRedirect() {
+    loginRedirects += 1;
+    if (loginRedirects < 3 || sessionCheck) return sessionCheck;
+    sessionCheck = checkSession().finally(() => {
+      sessionCheck = null;
     });
-    return reloginRunning;
+    return sessionCheck;
   }
 
   async function handle(item) {
-    const startedEpoch = sessionEpoch;
     let { record, hrefs } = await visit(role, context, item.url);
     if (isBusy(record)) {
       delayMs = Math.max(delayMs * 2, 500);
@@ -407,10 +380,10 @@ async function crawlRole(browser, role, statePaths) {
     }
     state.visits.push(record);
     if (record.loginRedirect) {
-      await onLoginRedirect(item, record, startedEpoch);
+      await onLoginRedirect();
       return;
     }
-    if (!reloginRunning) expired.length = 0;
+    if (!sessionCheck) loginRedirects = 0;
     for (const href of hrefs) enqueue(intake(href, item.url), item.depth + 1);
   }
 
@@ -429,7 +402,6 @@ async function crawlRole(browser, role, statePaths) {
         return;
       }
       samplesTaken.set(sampleKey, (samplesTaken.get(sampleKey) ?? 0) + 1);
-      item.sampleKey = sampleKey;
       visited += 1;
       active += 1;
       try {
@@ -500,21 +472,11 @@ function writeOutputs() {
 }
 
 const browser = await chromium.launch({ handleSIGINT: false });
-const statePaths = {};
-try {
-  for (const role of config.roles) {
-    statePaths[role] = await login(browser, { baseUrl: origin, role, stateDir, loginPath: config.loginPath });
-  }
-} catch (error) {
-  await browser.close();
-  if (!(error instanceof LoginError)) throw error;
-  console.error(error.message);
-  process.exit(1);
-}
+const statePaths = Object.fromEntries(config.roles.map((role) => [role, sessionPath(stateDir, role)]));
 
 let siteMap;
 // Evidence from an earlier crawl would sit beside this one's unlinked but easy to mistake for
-// current; clear it now that login worked (a failed login leaves the last crawl intact).
+// current; clear it now that the sessions are known to exist.
 rmSync(path.join(crawlDir, 'pages'), { recursive: true, force: true });
 try {
   if (config.bundleRoutes) state.bundle = await discoverRoutes(browser, statePaths[config.roles[0]]);

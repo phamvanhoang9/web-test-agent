@@ -44,23 +44,14 @@ file if there is none):
 ```
 node_modules/
 artifacts/
-.env
-.env.*
-*.env
-!.env.example
 ```
 
-## 6. Bundle folder and credential template
+## 6. Bundle folder
 ```bash
 mkdir -p artifacts
 ```
-If `.env.example` does not exist, create it with:
-```
-# Copy to <host>.env (for example app.example.com.env) and fill in a TEST account.
-TEST_EMAIL=
-TEST_PASSWORD=
-```
-Never ask the tester to type a password into the chat, and never write a real one yourself.
+No credential file is needed: the tester signs in by hand in a browser window (`login.mjs`),
+and the saved session lands in `artifacts/<host>/.auth/`. Never ask for a password in the chat.
 
 ## 7. chrome-devtools MCP
 Look at the tools available in this session for one whose name ends in
@@ -75,9 +66,9 @@ Look at the tools available in this session for one whose name ends in
 Edit `.claude/settings.local.json` of the current folder. Create it as
 `{ "permissions": { "allow": [], "deny": [] } }` if it does not exist; otherwise keep everything
 already in it and add only the rules that are missing.
-- **Always**, in `permissions.deny`: `Read(./.env)`, `Read(./.env.*)`, `Read(./*.env)`
-  and `Read(./artifacts/**/.auth/**)`. Credentials and saved sessions are loaded by the scripts;
-  the agent never needs to open them, and a hostile page must not be able to talk it into it.
+- **Always**, in `permissions.deny`: `Read(./artifacts/**/.auth/**)`. Saved sessions are loaded
+  by the scripts; the agent never needs to open them, and a hostile page must not be able to
+  talk it into it.
 - **Only when step 7 found the server**, in `permissions.allow`: the rule from step 7, so MCP
   cases run without a prompt per click.
 
@@ -93,7 +84,7 @@ Kết quả setup — <thư mục>
 - Chrome:      OK                     | Chưa thấy Chrome — các case MCP cần Chrome
 - MCP:         Đã kết nối             | Chưa kết nối — khởi động lại Claude Code rồi chạy lại setup
 - Quyền MCP:   Đã thêm                | Chưa thêm — cần cho phép ghi .claude/settings.local.json (rule: <rule>)
-- Chặn đọc .env: Đã thêm              | Chưa thêm — cần cho phép ghi .claude/settings.local.json
+- Chặn đọc .auth: Đã thêm             | Chưa thêm — cần cho phép ghi .claude/settings.local.json
 Bước tiếp theo: nói "test trang <url>" kèm đường dẫn tài liệu yêu cầu (nếu có, để ở đâu
 cũng được).
 ```

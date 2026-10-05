@@ -5,37 +5,42 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { chromium } from '@playwright/test';
 import { FILE_BYTES, startFixture, TRAPS, USERS } from './test-fixtures/app.mjs';
+import { testerSignsIn } from './test-fixtures/tester.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const CRAWL = path.join(here, 'crawl.mjs');
-const CREDENTIALS = {
-  TEST_ADMIN_EMAIL: USERS.admin.email,
-  TEST_ADMIN_PASSWORD: USERS.admin.password,
-  TEST_USER_EMAIL: USERS.user.email,
-  TEST_USER_PASSWORD: USERS.user.password,
-};
+const hostOf = (fixture) => new URL(fixture.url).host.replace(/[^a-z0-9.-]/gi, '_');
 
-/** process.env without any WEBTEST_* / TEST_* the developer happens to have set. */
-function cleanEnv(vars) {
-  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !/^(WEBTEST_|TEST_)/.test(key)));
-  return { ...env, ...vars };
-}
+/** process.env without any WEBTEST_* the developer happens to have set. */
+const cleanEnv = () => Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('WEBTEST_')));
 
 function paths(fixture, cwd) {
-  const host = new URL(fixture.url).host.replace(/[^a-z0-9.-]/gi, '_');
-  const crawlDir = path.join(cwd, 'artifacts', host, 'crawl');
+  const crawlDir = path.join(cwd, 'artifacts', hostOf(fixture), 'crawl');
   return { crawlDir, siteMap: () => JSON.parse(readFileSync(path.join(crawlDir, 'site-map.json'), 'utf8')) };
 }
 
-function runCrawl(
+/** A simulated tester signs each role in, as login.mjs would, saving sessions under `cwd`. */
+async function signIn(fixture, cwd, roles) {
+  const browser = await chromium.launch();
+  try {
+    const stateDir = path.join(cwd, 'artifacts', hostOf(fixture), '.auth');
+    for (const role of roles) await testerSignsIn(browser, USERS[role], { baseUrl: fixture.url, role, stateDir });
+  } finally {
+    await browser.close();
+  }
+}
+
+/** Crawl as `roles`; `signedIn` are the ones that have a saved session first. */
+async function runCrawl(
   fixture,
   args = [],
-  env = { WEBTEST_ROLES: 'admin,user', ...CREDENTIALS },
-  cwd = mkdtempSync(path.join(tmpdir(), 'webtest-crawl-')),
+  { roles = ['admin', 'user'], signedIn = roles, cwd = mkdtempSync(path.join(tmpdir(), 'webtest-crawl-')) } = {},
 ) {
+  await signIn(fixture, cwd, signedIn);
   return new Promise((resolve) => {
-    execFile(process.execPath, [CRAWL, fixture.url, '--delay-ms', '0', ...args], { cwd, env: cleanEnv(env) },
+    execFile(process.execPath, [CRAWL, fixture.url, '--roles', roles.join(','), '--delay-ms', '0', ...args], { cwd, env: cleanEnv() },
       (error, stdout, stderr) => resolve({ code: error ? error.code : 0, stdout, stderr, ...paths(fixture, cwd) }));
   });
 }
@@ -135,48 +140,33 @@ describe('crawl as admin and user', () => {
 });
 
 describe('crawl failures and limits', () => {
-  test('missing credentials: exit 1 naming the variable, never a value', async (t) => {
+  test('a role without a saved session: exit 1 naming the login command', async (t) => {
     const fixture = await startFixture();
     t.after(() => fixture.close());
 
-    const run = await runCrawl(fixture, [], { WEBTEST_ROLES: 'admin', TEST_ADMIN_EMAIL: USERS.admin.email });
+    const run = await runCrawl(fixture, ['--login-path', '/sign-in'], { roles: ['admin', 'user'], signedIn: ['admin'] });
 
     assert.equal(run.code, 1);
-    assert.match(run.stderr, /TEST_ADMIN_PASSWORD/);
-    assert.ok(!run.stderr.includes(USERS.admin.email));
+    assert.match(run.stderr, /No saved session for role\(s\): user/);
+    assert.match(run.stderr, /node login\.mjs .* --role user --login-path \/sign-in/);
   });
 
-  test('wrong password: exit 1 at still-on-login, password not echoed', async (t) => {
-    const fixture = await startFixture();
-    t.after(() => fixture.close());
-
-    const run = await runCrawl(fixture, [], {
-      WEBTEST_ROLES: 'admin', TEST_ADMIN_EMAIL: USERS.admin.email, TEST_ADMIN_PASSWORD: 'not-the-fixture-pass',
-    });
-
-    assert.equal(run.code, 1);
-    assert.match(run.stderr, /still-on-login/);
-    assert.ok(!run.stderr.includes('not-the-fixture-pass'));
-  });
-
-  test('an expired session is renewed once and the lost pages are revisited', async (t) => {
+  test('a session that dies mid-crawl stops the role with a warning', async (t) => {
     const fixture = await startFixture({ expireSessionsAfter: 8 });
     t.after(() => fixture.close());
 
-    const run = await runCrawl(fixture, ['--concurrency', '1'], { WEBTEST_ROLES: 'admin', ...CREDENTIALS });
+    const run = await runCrawl(fixture, ['--concurrency', '1'], { roles: ['admin'] });
     assert.equal(run.code, 0, run.stderr);
-    const map = run.siteMap();
 
-    assert.equal(fixture.logins.admin, 2);
-    assert.deepEqual(map.limitWarnings, []);
-    assert.ok(!map.templates.some((t) => t.visits.length && t.visits.every((v) => v.loginRedirect)));
+    assert.equal(fixture.logins.admin, 1, 'the crawler never signs in again by itself');
+    assert.ok(run.siteMap().limitWarnings.some((w) => /session for role admin expired/.test(w)));
   });
 
   test('a page whose screenshot times out still yields its links', { timeout: 180_000 }, async (t) => {
     const fixture = await startFixture({ slowFontHome: true });
     t.after(() => fixture.close());
 
-    const run = await runCrawl(fixture, [], { WEBTEST_ROLES: 'admin', ...CREDENTIALS });
+    const run = await runCrawl(fixture, [], { roles: ['admin'] });
     assert.equal(run.code, 0, run.stderr);
     const map = run.siteMap();
 
@@ -192,7 +182,7 @@ describe('crawl failures and limits', () => {
     assert.equal(run.code, 0, run.stderr);
     const map = run.siteMap();
 
-    assert.equal(fixture.logins.user, 1, 'no re-login was attempted');
+    assert.equal(fixture.logins.user, 1, 'signed in once, never again');
     assert.deepEqual(map.limitWarnings, []);
     assert.equal(map.access['/admin'].user, 'login-redirect');
     assert.ok(!map.templates.some((row) => row.template === '/login'), 'the login page is never crawled');
@@ -206,7 +196,7 @@ describe('crawl failures and limits', () => {
     mkdirSync(stale, { recursive: true });
     writeFileSync(path.join(stale, 'exploration.md'), 'evidence from an earlier crawl');
 
-    const run = await runCrawl(fixture, [], { WEBTEST_ROLES: 'admin', ...CREDENTIALS }, cwd);
+    const run = await runCrawl(fixture, [], { roles: ['admin'], cwd });
 
     assert.equal(run.code, 0, run.stderr);
     assert.equal(existsSync(stale), false);
@@ -218,7 +208,7 @@ describe('crawl failures and limits', () => {
     const fixture = await startFixture();
     t.after(() => fixture.close());
 
-    const run = await runCrawl(fixture, ['--no-bundle-routes'], { WEBTEST_ROLES: 'admin', ...CREDENTIALS });
+    const run = await runCrawl(fixture, ['--no-bundle-routes'], { roles: ['admin'] });
     assert.equal(run.code, 0, run.stderr);
     const map = run.siteMap();
 
@@ -230,7 +220,7 @@ describe('crawl failures and limits', () => {
     const fixture = await startFixture({ tooManyRequests: '/orders' });
     t.after(() => fixture.close());
 
-    const run = await runCrawl(fixture, ['--concurrency', '1'], { WEBTEST_ROLES: 'admin', ...CREDENTIALS });
+    const run = await runCrawl(fixture, ['--concurrency', '1'], { roles: ['admin'] });
 
     assert.equal(run.code, 0, run.stderr);
     assert.ok(run.siteMap().limitWarnings.some((w) => /rate limited \(HTTP 429\)/.test(w)));
@@ -252,8 +242,9 @@ describe('crawl failures and limits', () => {
     const fixture = await startFixture();
     t.after(() => fixture.close());
     const cwd = mkdtempSync(path.join(tmpdir(), 'webtest-crawl-'));
-    const child = spawn(process.execPath, [CRAWL, fixture.url, '--delay-ms', '300'], {
-      cwd, env: cleanEnv({ WEBTEST_ROLES: 'admin,user', ...CREDENTIALS }),
+    await signIn(fixture, cwd, ['admin', 'user']);
+    const child = spawn(process.execPath, [CRAWL, fixture.url, '--roles', 'admin,user', '--delay-ms', '300'], {
+      cwd, env: cleanEnv(),
     });
     child.stdout.on('data', (chunk) => {
       if (String(chunk).includes('crawling as')) child.kill('SIGINT');

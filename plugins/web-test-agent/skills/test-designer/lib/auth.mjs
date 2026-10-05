@@ -1,14 +1,13 @@
-// auth.mjs — log a role in through the site's own login form and save the session as a
-// Playwright storageState, so the crawler can reuse it. Credentials come from env and are
-// never printed: errors name the role and the failed step, nothing else.
+// auth.mjs — let the tester sign a role in by hand and save the session as a Playwright
+// storageState, so the crawler and the specs can reuse it. The tester types the credentials
+// into the browser window; nothing here sees, reads or stores them — only the session the
+// site issues afterwards.
 
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 
-const SUBMIT = /sign in|log in|login|đăng nhập|continue|tiếp tục/i;
-const EMAIL_LABEL = /email/i;
-const PASSWORD_LABEL = /password|mật khẩu/i;
-const STEP_TIMEOUT_MS = 10_000;
+// 0 = wait until the tester is in (Playwright's "no timeout").
+export const LOGIN_TIMEOUT_MS = 0;
 
 export class LoginError extends Error {
   constructor(role, step) {
@@ -19,66 +18,52 @@ export class LoginError extends Error {
   }
 }
 
-/** Env variable names holding a role's credentials. */
-export function credentialVars(role) {
-  const prefix = role === 'default' ? 'TEST' : `TEST_${role.toUpperCase()}`;
-  return { email: `${prefix}_EMAIL`, password: `${prefix}_PASSWORD` };
-}
+/** Where `role`'s saved session lives inside a bundle's .auth folder. */
+export const sessionPath = (stateDir, role) => path.join(stateDir, `${role}.json`);
 
-/** Names of the credential variables that are unset or empty for any of `roles`. */
-export function missingCredentials(roles, env = process.env) {
-  return roles.flatMap((role) => Object.values(credentialVars(role))).filter((name) => !env[name]);
-}
+/** Roles in `roles` that have no saved session in `stateDir`. */
+export const missingSessions = (stateDir, roles) => roles.filter((role) => !existsSync(sessionPath(stateDir, role)));
 
 /**
- * Sign `role` in at `loginPath` and write <stateDir>/<role>.json. Fields are found by label
- * (inputs only, so a "Show password" button is never mistaken for the field). A two-step
- * form — email, Continue, then password — is handled. The submit button is looked for only
- * inside the field's own form, so "Sign in with Google" beside it is never pressed; with no
- * such button, Enter submits. Success means the URL has left `loginPath` on the same origin
- * and no password field is showing; anything else throws LoginError.
+ * Open `loginPath` in a window of `browser` (which must be headed) and wait for the tester to
+ * sign `role` in. Success means the URL is back on the site's origin, off `loginPath`, and no
+ * password field is showing — so a two-step form or an SSO round trip through another origin
+ * is not mistaken for done. Writes <stateDir>/<role>.json. Closing the window or running out
+ * of a non-zero `timeoutMs` throws LoginError('not-signed-in').
  */
-export async function login(browser, { baseUrl, role, stateDir, loginPath = '/login' }) {
-  const vars = credentialVars(role);
+export async function login(browser, { baseUrl, role, stateDir, loginPath = '/login', timeoutMs = LOGIN_TIMEOUT_MS }) {
   const context = await browser.newContext({ baseURL: baseUrl });
   try {
     const page = await context.newPage();
     await page.goto(loginPath, { waitUntil: 'domcontentloaded' });
-    const input = (label) => page.getByLabel(label).and(page.locator('input')).first();
-    const submitFrom = async (field) => {
-      const button = page.locator('form').filter({ has: field }).getByRole('button', { name: SUBMIT }).first();
-      if (await button.count()) await button.click();
-      else await field.press('Enter');
-    };
-
-    if (!(await input(EMAIL_LABEL).isVisible())) throw new LoginError(role, 'field-not-found');
-    await input(EMAIL_LABEL).fill(process.env[vars.email]);
-    if (!(await input(PASSWORD_LABEL).isVisible())) {
-      await submitFrom(input(EMAIL_LABEL));
-      await input(PASSWORD_LABEL)
-        .waitFor({ state: 'visible', timeout: STEP_TIMEOUT_MS })
-        .catch(() => {
-          throw new LoginError(role, 'field-not-found');
-        });
-    }
-    await input(PASSWORD_LABEL).fill(process.env[vars.password]);
-    await submitFrom(input(PASSWORD_LABEL));
-    const origin = new URL(baseUrl).origin;
+    const limit = timeoutMs ? `up to ${timeoutMs / 60_000} min` : 'as long as it takes';
+    console.log(`Sign in as "${role}" in the browser window (waiting ${limit})...`);
     await page
-      .waitForURL((url) => url.origin === origin && url.pathname !== loginPath, {
-        timeout: STEP_TIMEOUT_MS,
-        waitUntil: 'domcontentloaded', // 'load' never fires if the landing page has a hung resource
-      })
+      .waitForFunction(
+        ({ origin, loginPath: path }) =>
+          location.origin === origin && location.pathname !== path && !document.querySelector('input[type=password]'),
+        { origin: new URL(baseUrl).origin, loginPath },
+        { timeout: timeoutMs, polling: 500 },
+      )
       .catch(() => {
-        throw new LoginError(role, 'still-on-login');
+        throw new LoginError(role, 'not-signed-in');
       });
-    if (await input(PASSWORD_LABEL).isVisible()) throw new LoginError(role, 'still-on-login');
 
     mkdirSync(stateDir, { recursive: true });
-    const statePath = path.join(stateDir, `${role}.json`);
+    const statePath = sessionPath(stateDir, role);
     await context.storageState({ path: statePath });
     return statePath;
   } finally {
     await context.close();
+  }
+}
+
+/** `login` in a visible Chromium window that closes afterwards. */
+export async function loginInWindow(chromium, options) {
+  const browser = await chromium.launch({ headless: false });
+  try {
+    return await login(browser, options);
+  } finally {
+    await browser.close();
   }
 }

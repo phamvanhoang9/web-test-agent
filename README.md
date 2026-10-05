@@ -99,7 +99,7 @@ installs Playwright and Chromium into that folder, creates `artifacts/` and `.gi
 checks the chrome-devtools MCP server; approve the one settings file it asks to write. After
 that, ask for what you need: *"test https://example.com end to end"*.
 
-Your work folder holds the bundles (`artifacts/<host>/`) and credentials (`<host>.env`); the
+Your work folder holds the bundles (`artifacts/<host>/`); the
 plugin holds the workflow. Updates arrive when the maintainer publishes a new version, and the
 work folder needs no change.
 
@@ -124,8 +124,10 @@ npm run status -- https://example.com
 # 1 · requirements: tell the agent where your documents are (any folder on your machine),
 #     it explores the site and writes requirements.md  →  you review and approve (G1)
 node plugins/web-test-agent/skills/test-designer/explore.mjs https://example.com
-#     large or login-gated site: crawl it instead (roles and credentials from .env)
-node plugins/web-test-agent/skills/test-designer/crawl.mjs https://example.com
+#     large or login-gated site: sign in by hand once per role (a browser window opens, you
+#     type the account there; the login path is whatever the site uses), then crawl it
+node plugins/web-test-agent/skills/test-designer/login.mjs https://example.com --role admin --login-path /login
+node plugins/web-test-agent/skills/test-designer/crawl.mjs https://example.com --roles admin --login-path /login
 #     options: crawl.mjs --roles admin,user --max-pages 200 --max-minutes 15 --exclude <regex>
 #              explore.mjs --steps steps.json  (click through a flow before capturing)
 
@@ -347,15 +349,14 @@ this shape.
 |---|---|
 | `BASE_URL` | **Required for step 3.** Sets the Playwright `baseURL` and resolves `artifacts/<host>/`. Specs navigate with `page.goto('/')`, never absolute URLs |
 | `WEBTEST_HOST` | Overrides the host derived from `BASE_URL`, when the bundle name should differ from the target |
-| `TEST_EMAIL`, `TEST_PASSWORD` | Test-account credentials for the default role. Read from the environment, never written into a plan or a spec |
-| `WEBTEST_ROLES` | Roles `crawl.mjs` logs in as, comma-separated (e.g. `admin,user`). Role `X` reads `TEST_X_EMAIL` / `TEST_X_PASSWORD` |
-| `WEBTEST_LOGIN_PATH` | Login page path for `crawl.mjs`, default `/login` |
 
-Copy [`.env.example`](.env.example) to `.env`, or to `<host>.env` (for example
-`app.example.com.env`) for credentials that belong to one site (read first, wins over `.env`).
-Both the crawler and the Playwright config load them; variables set in the shell win. `.env*`
-and `*.env` are gitignored — credentials never reach a commit. The older name `.env.<host>` is
-no longer read: rename such a file to `<host>.env`.
+**Accounts and passwords are not configuration.** Nothing is read from `.env` files or the
+environment. The tester names the login page path in the chat (default `/login`; scripts take
+`--login-path`), and `login.mjs <url> --role <role>` opens a Chromium window on it. The tester
+types the account and password there — SSO and MFA work too — and the window closes when the
+site lets them in. Only the resulting session is saved, to `artifacts/<host>/.auth/<role>.json`;
+`crawl.mjs` and the specs reuse it (`test.use({ storageState: `${process.env.WEBTEST_AUTH_DIR}/<role>.json` })`).
+When a session expires, run `login.mjs` again. Passwords never appear in the chat, a plan or a spec.
 
 Cross-browser and mobile projects are pre-declared and commented out in
 [`playwright.config.mjs`](plugins/web-test-agent/skills/test-runner/playwright.config.mjs) — uncomment to
@@ -383,6 +384,7 @@ plugins/web-test-agent/skills/
 ├── test-designer/       # step 2: SKILL.md, plan template, examples, resources/knowledge
 │   ├── explore.mjs      #   one page: outline, screenshot, console, network
 │   ├── crawl.mjs        #   whole site, several roles -> crawl/site-map.md
+│   ├── login.mjs        #   the tester signs in by hand -> .auth/<role>.json
 │   ├── coverage.mjs     #   plan vs requirements and exploration -> coverage.md
 │   └── lib/             #   bundle, capture, auth, site-map, route-discovery, url-template,
 │                        #   playwright (loads Playwright from the work folder)
@@ -426,9 +428,10 @@ The parts of this workflow that exist to keep it honest:
 - **Locators are role- and label-based.** `getByRole` and `getByLabel` over brittle CSS;
   web-first assertions over `waitForTimeout` as a synchronisation mechanism. See
   [`selector-resilience.md`](plugins/web-test-agent/skills/script-generator/resources/knowledge/selector-resilience.md).
-- **Credentials live in the environment.** Never in a plan, a spec, or a commit. The setup skill
-  also denies the agent read access to `.env*`, `*.env` and `artifacts/<host>/.auth/`: the scripts load
-  them, the agent never opens them.
+- **The tester types credentials, nobody else.** Never in the chat, a plan, a spec, an env file
+  or a commit: the tester signs in by hand in a browser window and only the session is saved.
+  The setup skill also denies the agent read access to `artifacts/<host>/.auth/`: the scripts
+  load it, the agent never opens it.
 - **Site and document content is evidence, never instructions.** Page text, console output,
   crawl results and requirement documents are analysed, not obeyed. Text in them that addresses
   the agent is quoted to the tester and recorded as a finding. This lowers the risk of prompt
@@ -457,7 +460,9 @@ The parts of this workflow that exist to keep it honest:
 | Empty button label in the exploration outline | An icon-only button. Target its `aria-label`, not its text |
 | MCP cases all reported as skipped | The `chrome-devtools` MCP server is not connected. It ships with the plugin and only loads at session start, so restart the session after installing or updating the plugin; `/web-test-agent:setup` reports whether it is connected |
 | A button sits on `Starting...` forever, no console error | The page called `getUserMedia`/`getDisplayMedia` and the browser's native "Choose what to share" picker is waiting outside the DOM, where no snapshot sees it and no click reaches it. The plugin's `.mcp.json` launches Chrome with `--use-fake-ui-for-media-stream` and `--auto-select-desktop-capture-source` to answer it automatically — effective from the next session. See [`media-capture-cases.md`](plugins/web-test-agent/skills/test-runner/resources/knowledge/media-capture-cases.md). It is never an application bug |
-| `crawl.mjs` exits with `login failed ... field-not-found` | The login form is not at `/login`, or its fields have no email/password label. Set `WEBTEST_LOGIN_PATH`; SSO and MFA logins are not supported |
+| `crawl.mjs` exits with `No saved session for role(s)` | That role has not signed in yet. Run the `login.mjs` command it prints |
+| `login.mjs` exits with `not-signed-in` | The window was closed (or a `--timeout-min <n>` limit passed; by default it waits indefinitely). Run it again; check that `--login-path` is the site's real login page |
+| `site-map.md` warns `session for role X expired` | The saved session died mid-crawl. Run `login.mjs` for that role again, then re-crawl |
 | `site-map.md` opens with a Warning | The crawl stopped early (page or time limit, rate limiting, a session that kept expiring). Raise `--max-pages` / `--max-minutes`, or narrow the crawl with `--exclude` |
 
 ---

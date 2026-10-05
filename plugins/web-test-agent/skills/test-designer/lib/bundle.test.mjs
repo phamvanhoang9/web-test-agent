@@ -1,9 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import { bundleDir, hostOf, loadEnv } from './bundle.mjs';
+import { bundleDir, hostOf } from './bundle.mjs';
 
 function withEnv(t, vars) {
   const saved = Object.fromEntries(Object.keys(vars).map((key) => [key, process.env[key]]));
@@ -32,32 +29,4 @@ test('WEBTEST_HOST overrides the derived host and is sanitized too', (t) => {
 test('bundleDir is artifacts/<host> with forward slashes', (t) => {
   withEnv(t, { WEBTEST_HOST: undefined });
   assert.equal(bundleDir('https://example.com/a'), 'artifacts/example.com');
-});
-
-test('loadEnv precedence is shell > <host>.env > .env', (t) => {
-  const root = mkdtempSync(path.join(tmpdir(), 'webtest-env-'));
-  writeFileSync(path.join(root, '.env'), 'WT_BASE=base\nWT_HOST=base\nWT_SHELL=base\n');
-  writeFileSync(path.join(root, 'example.com.env'), 'WT_HOST=host\nWT_SHELL=host\n');
-  withEnv(t, { WT_BASE: undefined, WT_HOST: undefined, WT_SHELL: 'shell' });
-
-  loadEnv('example.com', root);
-
-  assert.equal(process.env.WT_BASE, 'base');
-  assert.equal(process.env.WT_HOST, 'host');
-  assert.equal(process.env.WT_SHELL, 'shell');
-});
-
-test('loadEnv ignores the old .env.<host> name', (t) => {
-  const root = mkdtempSync(path.join(tmpdir(), 'webtest-env-'));
-  writeFileSync(path.join(root, '.env.example.com'), 'WT_OLD=old\n');
-  withEnv(t, { WT_OLD: undefined });
-
-  loadEnv('example.com', root);
-
-  assert.equal(process.env.WT_OLD, undefined);
-});
-
-test('loadEnv skips files that do not exist', () => {
-  const root = mkdtempSync(path.join(tmpdir(), 'webtest-env-'));
-  assert.doesNotThrow(() => loadEnv('nothing.test', root));
 });

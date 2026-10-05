@@ -16,10 +16,10 @@ function loadConfig(files) {
   for (const [name, content] of Object.entries(files)) writeFileSync(path.join(dir, name), content);
   const env = { ...process.env, BASE_URL: 'https://app.test' };
   delete env.WEBTEST_HOST;
-  const code = `await import(${JSON.stringify(pathToFileURL(CONFIG).href)});`;
+  const code = `await import(${JSON.stringify(pathToFileURL(CONFIG).href)}); console.log(process.env.WEBTEST_AUTH_DIR);`;
   return new Promise((resolve) => {
     execFile(process.execPath, ['--input-type=module', '-e', code], { cwd, env },
-      (error, stdout, stderr) => resolve({ code: error ? error.code : 0, stderr }));
+      (error, stdout, stderr) => resolve({ code: error ? error.code : 0, stdout, stderr, cwd }));
   });
 }
 
