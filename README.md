@@ -476,3 +476,7 @@ setup adds the allow rule for its tools (`mcp__plugin_web-test-agent_chrome-devt
 work folder's `.claude/settings.local.json`, so MCP cases run without a prompt per click.
 
 For working conventions and the internal contracts between phases, see [CLAUDE.md](CLAUDE.md).
+
+## License
+
+[MIT](LICENSE)
